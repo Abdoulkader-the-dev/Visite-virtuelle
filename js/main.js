@@ -200,6 +200,8 @@
     }
 
     function updateCameraLookAt() {
+        if (window.tourState.isXRActive) return;
+
         var phi = (90 - window.tourState.lat) * Math.PI / 180;
         var theta = window.tourState.lon * Math.PI / 180;
 
@@ -322,11 +324,12 @@
 
         var geometry = new THREE.SphereGeometry(500, 60, 40);
         geometry.scale(-1, 1, 1);
-        var material = new THREE.MeshBasicMaterial({ map: null });
+        var material = new THREE.MeshBasicMaterial({ map: null, side: THREE.DoubleSide });
         var sphere = new THREE.Mesh(geometry, material);
         scene.add(sphere);
 
         textureLoader = new THREE.TextureLoader();
+        textureLoader.setCrossOrigin('anonymous');
 
         window.tourState.camera = camera;
         window.tourState.renderer = renderer;
