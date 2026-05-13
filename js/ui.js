@@ -521,6 +521,13 @@
         document.getElementById('info-close').addEventListener('click', hideInfoCard);
     }
 
+    function exitVR() {
+        var renderer = window.tourState.renderer;
+        if (renderer && renderer.xr.getSession()) {
+            renderer.xr.getSession().end();
+        }
+    }
+
     window.initUI = initUI;
     window.updateNavMenu = updateNavMenu;
     window.updateMinimap = updateMinimap;
@@ -535,4 +542,5 @@
     window.showVRInfoPanel = showVRInfoPanel;
     window.hideVRInfoPanel = hideVRInfoPanel;
     window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
+    window.exitVR = exitVR;
 })();

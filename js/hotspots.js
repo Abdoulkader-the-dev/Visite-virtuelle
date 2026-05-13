@@ -48,6 +48,10 @@
     var xrRaycaster = new THREE.Raycaster();
     var tempMatrix = new THREE.Matrix4();
 
+    // Groupes pour les hotspots 3D (visibles en VR)
+    var hotspotGroup = new THREE.Group();
+    var hotspotMarkers = [];
+
     function currentHotspots() {
         return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots;
     }
@@ -129,22 +133,105 @@
         infoLayer.innerHTML = '';
         infoElements = [];
 
-        infoHotspots().forEach(function (hotspot) {
-            var element = document.createElement('button');
-            element.type = 'button';
-            element.className = 'info-hotspot';
-            element.textContent = hotspot.icon || 'i';
-            element.setAttribute('aria-label', hotspot.title || 'Information');
-            element.addEventListener('click', function (event) {
-                event.stopPropagation();
-                if (window.showInfoCard) {
-                    var rect = element.getBoundingClientRect();
-                    window.showInfoCard(hotspot, rect.left + rect.width / 2, rect.top + rect.height / 2);
-                }
-            });
-            infoLayer.appendChild(element);
-            infoElements.push({ hotspot: hotspot, element: element });
+        // Nettoyage des anciens marqueurs 3D
+        if (window.tourState.scene) {
+            window.tourState.scene.remove(hotspotGroup);
+        }
+        hotspotGroup = new THREE.Group();
+        hotspotMarkers = [];
+
+        currentHotspots().forEach(function (hotspot) {
+            // --- Logique HTML existante ---
+            if (hotspot.type === 'info') {
+                var element = document.createElement('button');
+                element.type = 'button';
+                element.className = 'info-hotspot';
+                element.textContent = hotspot.icon || 'i';
+                element.setAttribute('aria-label', hotspot.title || 'Information');
+                element.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                    if (window.showInfoCard) {
+                        var rect = element.getBoundingClientRect();
+                        window.showInfoCard(hotspot, rect.left + rect.width / 2, rect.top + rect.height / 2);
+                    }
+                });
+                infoLayer.appendChild(element);
+                infoElements.push({ hotspot: hotspot, element: element });
+            }
+
+            // --- NOUVEAU : Création du marqueur 3D pour la VR ---
+            var marker;
+            if (hotspot.type === 'transition') {
+                // Disque au sol pour la navigation
+                var geo = new THREE.CircleGeometry(12, 32);
+                var mat = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    transparent: true,
+                    opacity: 0.6,
+                    side: THREE.DoubleSide
+                });
+                marker = new THREE.Mesh(geo, mat);
+                // On l'oriente à plat sur le sol (Y = constante)
+                marker.rotation.x = -Math.PI / 2;
+            } else {
+                // Sprite pour les infos
+                var canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                var ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#3B82F6';
+                ctx.beginPath();
+                ctx.arc(32, 32, 30, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 40px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(hotspot.icon || 'i', 32, 32);
+                
+                var texture = new THREE.CanvasTexture(canvas);
+                var spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                marker = new THREE.Sprite(spriteMat);
+                marker.scale.set(20, 20, 1);
+            }
+
+            marker.position.copy(hotspot.positionVector);
+            // Légère compensation pour éviter le z-fighting si au sol
+            if (hotspot.type === 'transition') marker.position.y += 0.5;
+            
+            hotspotGroup.add(marker);
+            hotspotMarkers.push({ hotspot: hotspot, marker: marker });
         });
+
+        if (window.tourState.scene) {
+            window.tourState.scene.add(hotspotGroup);
+        }
+
+        // --- Bouton Quitter VR (3D) ---
+        var exitCanvas = document.createElement('canvas');
+        exitCanvas.width = 128;
+        exitCanvas.height = 48;
+        var exitCtx = exitCanvas.getContext('2d');
+        exitCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        exitCtx.roundRect ? exitCtx.roundRect(0, 0, 128, 48, 8) : exitCtx.fillRect(0, 0, 128, 48);
+        exitCtx.fill();
+        exitCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        exitCtx.lineWidth = 2;
+        exitCtx.stroke();
+        exitCtx.fillStyle = 'white';
+        exitCtx.font = 'bold 16px Arial';
+        exitCtx.textAlign = 'center';
+        exitCtx.textBaseline = 'middle';
+        exitCtx.fillText('QUITTER VR', 64, 24);
+        
+        var exitTexture = new THREE.CanvasTexture(exitCanvas);
+        var exitMat = new THREE.SpriteMaterial({ map: exitTexture, transparent: true });
+        var exitSprite = new THREE.Sprite(exitMat);
+        exitSprite.scale.set(30, 12, 1);
+        // Positionné vers le bas pour ne pas gêner la vue centrale
+        exitSprite.position.set(0, -60, -150); 
+        hotspotGroup.add(exitSprite);
+        hotspotMarkers.push({ hotspot: { type: 'exit' }, marker: exitSprite });
 
         // ---- Flèches directionnelles : avancer / reculer par ordre de nom ----
         // Navigation séquentielle selon le numéro du fichier image :
@@ -226,7 +313,18 @@
             return;
         }
 
+        // En mode VR, on cache les hotspots HTML (car ils sont invisibles dans le casque
+        // et polluent l'écran du PC) et on s'assure que les hotspots 3D sont visibles.
+        var isVR = window.tourState.isXRActive;
+        if (hotspotGroup) {
+            hotspotGroup.visible = true; // Toujours visible pour servir de base
+        }
+
         infoElements.forEach(function (entry) {
+            if (isVR) {
+                entry.element.classList.remove('visible');
+                return;
+            }
             var vec = entry.hotspot.positionVector.clone();
             vec.project(window.tourState.camera);
 
@@ -340,7 +438,13 @@
         var best = null;
         var bestDistance = threshold || 36;
 
-        currentHotspots().forEach(function (hotspot) {
+        // On inclut le bouton exit s'il est dans les types recherchés
+        var searchHotspots = currentHotspots().concat([{
+            type: 'exit',
+            positionVector: new THREE.Vector3(0, -60, -150)
+        }]);
+
+        searchHotspots.forEach(function (hotspot) {
             if (types.indexOf(hotspot.type) === -1) {
                 return;
             }
@@ -362,7 +466,7 @@
     }
 
     function handleXRSelect(controller) {
-        var hotspot = findHotspotFromRay(rayFromController(controller), ['transition', 'info'], 46);
+        var hotspot = findHotspotFromRay(rayFromController(controller), ['transition', 'info', 'exit'], 46);
         if (!hotspot) {
             return;
         }
@@ -371,6 +475,8 @@
             window.startTransition(hotspot.target, { hotspot: hotspot });
         } else if (hotspot.type === 'info' && window.showVRInfoPanel) {
             window.showVRInfoPanel(hotspot);
+        } else if (hotspot.type === 'exit' && window.exitVR) {
+            window.exitVR();
         }
     }
 
@@ -383,14 +489,29 @@
             window.tourState.camera.getWorldPosition(new THREE.Vector3()),
             window.tourState.camera.getWorldDirection(new THREE.Vector3())
         );
-        var hotspot = findHotspotFromRay(ray, ['transition', 'info'], 38);
+        var hotspot = findHotspotFromRay(ray, ['transition', 'info', 'exit'], 38);
         var progress = document.getElementById('reticle-progress');
+
+        // Réinitialisation de l'ancien hotspot survolé
+        if (window.tourState.gazeTarget && window.tourState.gazeTarget !== hotspot) {
+            var oldMarker = getMarkerForHotspot(window.tourState.gazeTarget);
+            if (oldMarker) {
+                if (oldMarker.material.color) oldMarker.material.color.set(0xffffff);
+                if (oldMarker.scale.x > 20) oldMarker.scale.set(20, 20, 1);
+            }
+        }
 
         if (!hotspot) {
             window.tourState.gazeTarget = null;
             window.tourState.gazeStartTime = 0;
             progress.classList.remove('active');
             return;
+        }
+
+        // Highlight du nouveau hotspot
+        var marker = getMarkerForHotspot(hotspot);
+        if (marker) {
+            if (marker.material.color) marker.material.color.set(0x3B82F6);
         }
 
         if (window.tourState.gazeTarget !== hotspot) {
@@ -410,7 +531,22 @@
             if (window.showVRInfoPanel) {
                 window.showVRInfoPanel(hotspot);
             }
+        } else if (hotspot.type === 'exit' && Date.now() - window.tourState.gazeStartTime > 1500) {
+            progress.classList.remove('active');
+            window.tourState.gazeTarget = null;
+            if (window.exitVR) {
+                window.exitVR();
+            }
         }
+    }
+
+    function getMarkerForHotspot(hotspot) {
+        for (var i = 0; i < hotspotMarkers.length; i++) {
+            if (hotspotMarkers[i].hotspot === hotspot) {
+                return hotspotMarkers[i].marker;
+            }
+        }
+        return null;
     }
 
     window.initHotspots = initHotspots;
