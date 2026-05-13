@@ -46,6 +46,7 @@
                     function (texture) {
                         texture.minFilter = THREE.LinearFilter;
                         texture.magFilter = THREE.LinearFilter;
+                        // encoding doit correspondre à renderer.outputEncoding = sRGBEncoding
                         texture.encoding = THREE.sRGBEncoding;
                         textureCache[path] = texture;
                         textureCache[candidate] = texture;
@@ -130,8 +131,11 @@
         document.getElementById('loading-overlay').classList.remove('visible');
     }
 
-    function loadScene(sceneId, keepTransitionActive) {
+    function loadScene(sceneId, loadOptions) {
         var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
+        var options = typeof loadOptions === 'object' ? loadOptions : {
+            keepTransitionActive: !!loadOptions
+        };
 
         if (!sceneConfig) {
             return Promise.reject(new Error('Scène inconnue: ' + sceneId));
@@ -145,10 +149,10 @@
             window.tourState.sphere.material.needsUpdate = true;
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
-            window.tourState.lon = 0;
-            window.tourState.lat = 0;
-            window.tourState.fov = 75;
-            window.tourState.camera.fov = 75;
+            window.tourState.lon = typeof options.initialLon === 'number' ? options.initialLon : 0;
+            window.tourState.lat = typeof options.initialLat === 'number' ? options.initialLat : 0;
+            window.tourState.fov = typeof options.initialFov === 'number' ? options.initialFov : 75;
+            window.tourState.camera.fov = window.tourState.fov;
             window.tourState.camera.updateProjectionMatrix();
             window.tourState.activeFloorHotspot = null;
             window.tourState.mouseSphereLat = null;
@@ -174,7 +178,7 @@
 
             preloadLinkedScenes(sceneId);
             setTimeout(hideLoading, 120);
-            if (!keepTransitionActive) {
+            if (!options.keepTransitionActive) {
                 window.tourState.isTransitioning = false;
             }
             window.tourState.lastInteractionTime = Date.now();
@@ -292,12 +296,12 @@
 
     function getStartParams() {
         var params = new URLSearchParams(window.location.search);
-        var sceneId = params.get('scene') || '1';
+        var sceneId = params.get('scene') || '12';
         var lon = parseFloat(params.get('lon'));
         var lat = parseFloat(params.get('lat'));
 
         if (!window.TOUR_CONFIG.scenes[sceneId]) {
-            sceneId = '1';
+            sceneId = '12';
         }
 
         return {
@@ -321,6 +325,13 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
+        // Correction luminosité — les photos prises en intérieur apparaissent
+        // sombres sans ces deux paramètres. outputEncoding sRGB = couleurs fidèles.
+        // toneMapping LinearToneMapping + exposure = contrôle de la luminosité globale.
+        // Pour ajuster : changer renderer.toneMappingExposure (1.0 = neutre, >1 = plus clair)
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.LinearToneMapping;
+        renderer.toneMappingExposure = 1.4;
 
         var geometry = new THREE.SphereGeometry(500, 60, 40);
         geometry.scale(-1, 1, 1);

@@ -80,6 +80,20 @@
         return nearest;
     }
 
+    function screenPointForHotspot(hotspot) {
+        var vec = hotspot.positionVector.clone();
+        vec.project(window.tourState.camera);
+
+        if (vec.z > 1 || vec.z < -1) {
+            return null;
+        }
+
+        return {
+            x: (vec.x + 1) / 2 * window.innerWidth,
+            y: (-vec.y + 1) / 2 * window.innerHeight
+        };
+    }
+
     // -------------------------------------------------------------------------
     // computeArrowAngle(hotspot)
     //
@@ -98,7 +112,7 @@
         var pos = hotspot.positionVector;
         // Angle absolu du hotspot dans le plan horizontal (XZ) de la sphère
         // atan2(x, -z) : z négatif = devant, cohérent avec le système Three.js
-        var hotspotAngleDeg = Math.atan2(pos.x, -pos.z) * (180 / Math.PI);
+        var hotspotAngleDeg = Math.atan2(pos.z, pos.x) * (180 / Math.PI);
         // Angle relatif : on retire le cap caméra pour que la flèche soit
         // toujours dans le repère de l'écran et non du monde
         var relativeAngle = hotspotAngleDeg - window.tourState.lon;
@@ -141,17 +155,17 @@
 
         if (fwdBtn) {
             fwdBtn.onclick = function () {
-                var nextId = getAdjacentSceneId(+1);
-                if (nextId && window.startTransition) {
-                    window.startTransition(nextId);
+                var hotspot = bestHotspotInView(+1);
+                if (hotspot && window.startTransition) {
+                    window.startTransition(hotspot.target, { hotspot: hotspot });
                 }
             };
         }
         if (bwdBtn) {
             bwdBtn.onclick = function () {
-                var prevId = getAdjacentSceneId(-1);
-                if (prevId && window.startTransition) {
-                    window.startTransition(prevId);
+                var hotspot = bestHotspotInView(-1);
+                if (hotspot && window.startTransition) {
+                    window.startTransition(hotspot.target, { hotspot: hotspot });
                 }
             };
         }
@@ -182,6 +196,29 @@
         if (currentIndex === -1) { currentIndex = 0; }
         var nextIndex = ((currentIndex + direction) % ids.length + ids.length) % ids.length;
         return ids[nextIndex];
+    }
+
+    function normalizeRelativeAngle(degrees) {
+        return ((degrees + 540) % 360) - 180;
+    }
+
+    function bestHotspotInView(direction) {
+        var best = null;
+        var bestScore = Infinity;
+
+        transitionHotspots().forEach(function (hotspot) {
+            var relative = normalizeRelativeAngle(computeArrowAngle(hotspot));
+            var forwardScore = Math.abs(relative);
+            var backwardScore = Math.abs(Math.abs(relative) - 180);
+            var score = direction > 0 ? forwardScore : backwardScore;
+
+            if (score < bestScore) {
+                bestScore = score;
+                best = hotspot;
+            }
+        });
+
+        return best;
     }
 
     function updateHotspots() {
@@ -225,9 +262,10 @@
 
         if (onFloor) {
             var nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint);
-            if (nearest) {
-                floorHotspot.style.left = mouseX + 'px';
-                floorHotspot.style.top = mouseY + 'px';
+            var screenPoint = nearest ? screenPointForHotspot(nearest) : null;
+            if (nearest && screenPoint) {
+                floorHotspot.style.left = screenPoint.x + 'px';
+                floorHotspot.style.top = screenPoint.y + 'px';
                 floorHotspot.style.opacity = '1';
                 floorLabel.textContent = nearest.label || window.TOUR_CONFIG.scenes[nearest.target].name;
                 window.tourState.activeFloorHotspot = nearest;
@@ -240,6 +278,9 @@
                 if (arrow) {
                     arrow.style.transform = 'rotate(' + angle + 'deg)';
                 }
+            } else {
+                floorHotspot.style.opacity = '0';
+                window.tourState.activeFloorHotspot = null;
             }
         } else {
             floorHotspot.style.opacity = '0';
@@ -283,7 +324,9 @@
         }
 
         if (window.tourState.activeFloorHotspot && window.startTransition) {
-            window.startTransition(window.tourState.activeFloorHotspot.target);
+            window.startTransition(window.tourState.activeFloorHotspot.target, {
+                hotspot: window.tourState.activeFloorHotspot
+            });
         }
     }
 
@@ -325,7 +368,7 @@
         }
 
         if (hotspot.type === 'transition' && window.startTransition) {
-            window.startTransition(hotspot.target);
+            window.startTransition(hotspot.target, { hotspot: hotspot });
         } else if (hotspot.type === 'info' && window.showVRInfoPanel) {
             window.showVRInfoPanel(hotspot);
         }
@@ -360,7 +403,7 @@
         if (hotspot.type === 'transition' && Date.now() - window.tourState.gazeStartTime > 2000) {
             progress.classList.remove('active');
             window.tourState.gazeTarget = null;
-            window.startTransition(hotspot.target);
+            window.startTransition(hotspot.target, { hotspot: hotspot });
         } else if (hotspot.type === 'info' && Date.now() - window.tourState.gazeStartTime > 1500) {
             progress.classList.remove('active');
             window.tourState.gazeTarget = null;

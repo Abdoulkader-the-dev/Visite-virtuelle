@@ -30,6 +30,70 @@
         });
     }
 
+    function normalizeDegrees(degrees) {
+        return ((degrees % 360) + 360) % 360;
+    }
+
+    function shortestAngleDelta(fromDeg, toDeg) {
+        return ((toDeg - fromDeg + 540) % 360) - 180;
+    }
+
+    function angleForPosition(position) {
+        return Math.atan2(position.z, position.x) * (180 / Math.PI);
+    }
+
+    function findTransitionHotspot(sceneId, targetSceneId) {
+        var scene = window.TOUR_CONFIG.scenes[sceneId];
+        var match = null;
+
+        if (!scene || !scene.hotspots) {
+            return null;
+        }
+
+        scene.hotspots.some(function (hotspot) {
+            if (hotspot.type === 'transition' && hotspot.target === targetSceneId) {
+                match = hotspot;
+                return true;
+            }
+            return false;
+        });
+
+        return match;
+    }
+
+    function arrivalLonForTransition(fromSceneId, targetSceneId) {
+        var reverseHotspot = findTransitionHotspot(targetSceneId, fromSceneId);
+
+        if (!reverseHotspot) {
+            return null;
+        }
+
+        return normalizeDegrees(angleForPosition(reverseHotspot.position) + 180);
+    }
+
+    function animateLon(targetLon, duration) {
+        return new Promise(function (resolve) {
+            var start = performance.now();
+            var startLon = window.tourState.lon;
+            var delta = shortestAngleDelta(startLon, targetLon);
+
+            function frame(now) {
+                var progress = Math.min(1, (now - start) / duration);
+                var eased = progress * (2 - progress);
+                window.tourState.lon = startLon + delta * eased;
+
+                if (progress < 1) {
+                    requestAnimationFrame(frame);
+                } else {
+                    window.tourState.lon = targetLon;
+                    resolve();
+                }
+            }
+
+            requestAnimationFrame(frame);
+        });
+    }
+
     function fadeOverlay(visible) {
         return new Promise(function (resolve) {
             var overlay = document.getElementById('transition-overlay');
@@ -81,12 +145,21 @@
     }
 
     function startTransition(targetSceneId, options) {
+        var sourceSceneId = window.tourState.currentScene;
+        var sourceHotspot;
+        var sourceLon;
+        var targetLon;
+
         if (window.tourState.isTransitioning || targetSceneId === window.tourState.currentScene) {
             return;
         }
         if (!window.TOUR_CONFIG.scenes[targetSceneId]) {
             return;
         }
+
+        sourceHotspot = options && options.hotspot ? options.hotspot : findTransitionHotspot(sourceSceneId, targetSceneId);
+        sourceLon = sourceHotspot ? angleForPosition(sourceHotspot.position) : window.tourState.lon;
+        targetLon = arrivalLonForTransition(sourceSceneId, targetSceneId);
 
         pushHistory(options);
         window.tourState.isTransitioning = true;
@@ -99,24 +172,32 @@
             window.hideFloorHotspot();
         }
 
-        animateFov(window.tourState.fov, 35, 600, easeIn)
+        animateLon(sourceLon, 360)
             .then(function () {
-                return animateBlur(0, 8, 350);
+                return animateFov(window.tourState.fov, 38, 420, easeIn);
+            })
+            .then(function () {
+                return animateBlur(0, 4, 180);
             })
             .then(function () {
                 return fadeOverlay(true);
             })
             .then(function () {
-                return window.loadScene(targetSceneId, true);
+                return window.loadScene(targetSceneId, {
+                    keepTransitionActive: true,
+                    initialLon: targetLon === null ? sourceLon : targetLon,
+                    initialLat: 0,
+                    initialFov: 38
+                });
             })
             .then(function () {
                 return fadeOverlay(false);
             })
             .then(function () {
-                return animateBlur(8, 0, 350);
+                return animateBlur(4, 0, 220);
             })
             .then(function () {
-                return animateFov(35, 75, 500, easeOut);
+                return animateFov(38, 75, 520, easeOut);
             })
             .then(function () {
                 window.tourState.fov = 75;

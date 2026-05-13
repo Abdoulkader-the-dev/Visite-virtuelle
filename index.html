@@ -66,7 +66,7 @@
             Le label affiche le nom de la scène cible.
         -->
         <div id="floor-hotspot">
-            <svg id="floor-arrow-svg" viewBox="0 0 120 60" width="120" height="60"
+            <svg id="floor-arrow-svg" viewBox="0 0 128 74" width="128" height="74"
                 xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <!--
                     ELLIPSE DE SOL
@@ -74,9 +74,9 @@
                     Modifier rx/ry pour changer les proportions.
                     Modifier fill pour changer la couleur de fond.
                 -->
-                <ellipse cx="60" cy="38" rx="52" ry="18"
-                    fill="rgba(255,255,255,0.12)"
-                    stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>
+                <ellipse cx="64" cy="48" rx="50" ry="17"
+                    fill="rgba(0,0,0,0.10)"
+                    stroke="rgba(255,255,255,0.55)" stroke-width="1.2"/>
 
                 <!--
                     FLÈCHE DIRECTIONNELLE PLATE
@@ -85,11 +85,11 @@
                     Modifier les points pour changer la forme de la flèche.
                     Modifier fill pour changer la couleur.
                 -->
-                <polygon points="60,6 74,32 60,26 46,32"
-                    fill="white" fill-opacity="0.92"/>
+                <path d="M64 12 L104 47 L82 42 L64 56 L46 42 L24 47 Z"
+                    fill="rgba(255,255,255,0.88)"/>
                 <!-- Tige de la flèche -->
-                <rect x="56" y="26" width="8" height="16" rx="2"
-                    fill="white" fill-opacity="0.65"/>
+                <path d="M64 24 L88 45 L75 42 L64 50 L53 42 L40 45 Z"
+                    fill="rgba(255,255,255,0.34)"/>
             </svg>
             <div id="floor-hotspot-label"></div>
         </div>

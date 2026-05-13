@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Éditeur de hotspots</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; color: #f0f0f0; font-family: system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+
+        #viewer { flex: 1; position: relative; cursor: crosshair; }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        #panel {
+            width: 340px; flex-shrink: 0;
+            background: #111; border-left: 1px solid #222;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        #panel-header {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid #222;
+            background: #0d0d0d;
+        }
+        #panel-header h1 { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+        #panel-header p  { font-size: 12px; color: #666; line-height: 1.5; }
+
+        .section { padding: 16px 20px; border-bottom: 1px solid #1a1a1a; }
+        .section label { display: block; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+
+        select, input[type=text], input[type=number] {
+            width: 100%; padding: 8px 10px; background: #1a1a1a; border: 1px solid #2a2a2a;
+            border-radius: 6px; color: #fff; font-size: 13px; outline: none;
+        }
+        select:focus, input:focus { border-color: #3B82F6; }
+
+        #coords-box {
+            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+            padding: 14px 16px; font-family: 'Courier New', monospace;
+        }
+        .coord-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .coord-row:last-child { margin-bottom: 0; }
+        .coord-label { width: 14px; font-size: 13px; color: #888; }
+        .coord-val { flex: 1; font-size: 18px; font-weight: 600; color: #3B82F6; }
+
+        #copy-btn {
+            width: 100%; padding: 10px; background: #3B82F6; border: none;
+            border-radius: 8px; color: #fff; font-size: 13px; font-weight: 600;
+            cursor: pointer; margin-top: 12px; transition: background 0.15s;
+        }
+        #copy-btn:hover { background: #2563EB; }
+        #copy-btn.copied { background: #16a34a; }
+
+        #log {
+            flex: 1; overflow-y: auto; padding: 14px 20px;
+        }
+        #log h3 { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+        .log-entry {
+            background: #161616; border: 1px solid #222; border-radius: 6px;
+            padding: 10px 12px; margin-bottom: 8px; font-size: 12px; font-family: monospace; color: #aaa;
+            cursor: pointer; transition: border-color 0.15s;
+        }
+        .log-entry:hover { border-color: #3B82F6; color: #fff; }
+        .log-entry .scene-tag { color: #3B82F6; font-size: 11px; margin-bottom: 4px; }
+        .log-entry .log-code { color: #22d3ee; white-space: pre; }
+
+        #clear-btn {
+            width: 100%; padding: 8px; background: transparent; border: 1px solid #2a2a2a;
+            border-radius: 6px; color: #666; font-size: 12px; cursor: pointer; margin-top: 4px;
+        }
+        #clear-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+        #dot {
+            position: absolute; width: 18px; height: 18px;
+            border-radius: 50%; background: #ef4444;
+            border: 2.5px solid #fff;
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.35);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none;
+            z-index: 10;
+        }
+        #crosshair-h, #crosshair-v {
+            position: absolute; background: rgba(59,130,246,0.35);
+            pointer-events: none; display: none;
+        }
+        #crosshair-h { height: 1px; width: 100%; top: 50%; }
+        #crosshair-v { width: 1px; height: 100%; left: 50%; }
+
+        #hint {
+            position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+            padding: 8px 16px; border-radius: 20px; font-size: 12px; color: #aaa;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════  VIEWER  ═══════════════════════ -->
+<div id="viewer">
+    <canvas id="c"></canvas>
+    <div id="dot"></div>
+    <div id="crosshair-h"></div>
+    <div id="crosshair-v"></div>
+    <div id="hint">Cliquer pour capturer les coordonnées du hotspot</div>
+</div>
+
+<!-- ═══════════════════════  PANEL  ═══════════════════════ -->
+<div id="panel">
+    <div id="panel-header">
+        <h1>🎯 Éditeur de hotspots</h1>
+        <p>Naviguez dans la scène · Cliquez pour positionner un hotspot · Copiez les coordonnées dans config.js</p>
+    </div>
+
+    <div class="section">
+        <label>Scène active</label>
+        <select id="scene-select"></select>
+    </div>
+
+    <div class="section">
+        <label>Dernières coordonnées capturées</label>
+        <div id="coords-box">
+            <div class="coord-row"><span class="coord-label">x</span><span class="coord-val" id="cx">—</span></div>
+            <div class="coord-row"><span class="coord-label">y</span><span class="coord-val" id="cy">—</span></div>
+            <div class="coord-row"><span class="coord-label">z</span><span class="coord-val" id="cz">—</span></div>
+        </div>
+        <button id="copy-btn">Copier position: { x, y, z }</button>
+    </div>
+
+    <div id="log">
+        <h3>Historique des clics</h3>
+        <div id="log-list"></div>
+        <button id="clear-btn">Effacer l'historique</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/config.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var camera, renderer, sphere, textureLoader;
+    var isDragging = false;
+    var lon = 0, lat = 0, fov = 75;
+    var lastX, lastY;
+    var currentScene = null;
+    var lastCoords = null;
+
+    var canvas  = document.getElementById('c');
+    var dot     = document.getElementById('dot');
+    var cxEl    = document.getElementById('cx');
+    var cyEl    = document.getElementById('cy');
+    var czEl    = document.getElementById('cz');
+    var copyBtn = document.getElementById('copy-btn');
+    var logList = document.getElementById('log-list');
+    var sceneSelect = document.getElementById('scene-select');
+
+    // ── Init Three.js ──────────────────────────────────────────────────────────
+    var scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+    camera.position.set(0, 0, 0.001);
+
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping    = THREE.LinearToneMapping;
+    renderer.toneMappingExposure = 1.4;
+
+    var geo  = new THREE.SphereGeometry(500, 60, 40);
+    geo.scale(-1, 1, 1);
+    var mat  = new THREE.MeshBasicMaterial({ map: null });
+    sphere   = new THREE.Mesh(geo, mat);
+    scene.add(sphere);
+
+    textureLoader = new THREE.TextureLoader();
+
+    // ── Populate scene selector ────────────────────────────────────────────────
+    var scenes = window.TOUR_CONFIG.scenes;
+    Object.keys(scenes).sort(function(a,b){ return +a - +b; }).forEach(function(id) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id + ' — ' + scenes[id].name;
+        sceneSelect.appendChild(opt);
+    });
+
+    function loadScene(id) {
+        currentScene = id;
+        var img = scenes[id].image;
+        // Try .JPG then .jpg
+        var candidates = [img, img.replace(/\.jpg$/i, '.JPG'), img.replace(/\.JPG$/i, '.jpg')];
+        var idx = 0;
+        function tryNext() {
+            if (idx >= candidates.length) return;
+            textureLoader.load(candidates[idx], function(tex) {
+                tex.minFilter = tex.magFilter = THREE.LinearFilter;
+                tex.encoding  = THREE.sRGBEncoding;
+                sphere.material.map = tex;
+                sphere.material.needsUpdate = true;
+            }, undefined, function(){ idx++; tryNext(); });
+        }
+        tryNext();
+        lon = 0; lat = 0;
+    }
+    loadScene(Object.keys(scenes).sort(function(a,b){return+a-+b;})[0]);
+    sceneSelect.addEventListener('change', function() { loadScene(this.value); });
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+    function resize() {
+        var w = document.getElementById('viewer').clientWidth;
+        var h = window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        renderer.setPixelRatio(window.devicePixelRatio || 1);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // ── Camera controls ───────────────────────────────────────────────────────
+    canvas.addEventListener('mousedown', function(e) { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+    window.addEventListener('mouseup',   function()  { isDragging = false; });
+    window.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        lon -= (e.clientX - lastX) * 0.25;
+        lat  = Math.max(-85, Math.min(85, lat + (e.clientY - lastY) * 0.25));
+        lastX = e.clientX; lastY = e.clientY;
+    });
+    canvas.addEventListener('wheel', function(e) {
+        fov = Math.max(40, Math.min(100, fov + e.deltaY * 0.05));
+        camera.fov = fov; camera.updateProjectionMatrix();
+    });
+
+    // ── Click → capture coords ────────────────────────────────────────────────
+    canvas.addEventListener('click', function(e) {
+        if (isDragging) return;
+
+        var rect   = canvas.getBoundingClientRect();
+        var mouse  = new THREE.Vector2(
+            ((e.clientX - rect.left) / rect.width)  * 2 - 1,
+           -((e.clientY - rect.top)  / rect.height) * 2 + 1
+        );
+        var ray = new THREE.Raycaster();
+        ray.setFromCamera(mouse, camera);
+
+        var hits = ray.intersectObject(sphere);
+        if (!hits.length) return;
+
+        var pt = hits[0].point;
+        var x  = Math.round(pt.x);
+        var y  = Math.round(pt.y);
+        var z  = Math.round(pt.z);
+        lastCoords = { x: x, y: y, z: z };
+
+        cxEl.textContent = x;
+        cyEl.textContent = y;
+        czEl.textContent = z;
+        copyBtn.textContent = 'Copier position: { x, y, z }';
+        copyBtn.classList.remove('copied');
+
+        // Red dot on canvas
+        dot.style.left = e.clientX - rect.left + 'px';
+        dot.style.top  = e.clientY - rect.top  + 'px';
+        dot.style.display = 'block';
+
+        // Log entry
+        var code = 'position: { x: ' + x + ', y: ' + y + ', z: ' + z + ' }';
+        var entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML =
+            '<div class="scene-tag">Scène ' + currentScene + ' — ' + scenes[currentScene].name + '</div>' +
+            '<div class="log-code">' + code + '</div>';
+        entry.addEventListener('click', function() {
+            navigator.clipboard.writeText(code).catch(function(){});
+            this.style.borderColor = '#22d3ee';
+            setTimeout(function(){ entry.style.borderColor = ''; }, 1000);
+        });
+        logList.prepend(entry);
+    });
+
+    // ── Copy button ───────────────────────────────────────────────────────────
+    copyBtn.addEventListener('click', function() {
+        if (!lastCoords) return;
+        var code = 'position: { x: ' + lastCoords.x + ', y: ' + lastCoords.y + ', z: ' + lastCoords.z + ' }';
+        navigator.clipboard.writeText(code).then(function() {
+            copyBtn.textContent = '✓ Copié !';
+            copyBtn.classList.add('copied');
+            setTimeout(function(){ copyBtn.textContent = 'Copier position: { x, y, z }'; copyBtn.classList.remove('copied'); }, 2000);
+        });
+    });
+
+    // ── Clear log ─────────────────────────────────────────────────────────────
+    document.getElementById('clear-btn').addEventListener('click', function() {
+        logList.innerHTML = '';
+        dot.style.display = 'none';
+    });
+
+    // ── Crosshair on hover ────────────────────────────────────────────────────
+    var ch = document.getElementById('crosshair-h');
+    var cv = document.getElementById('crosshair-v');
+    document.getElementById('viewer').addEventListener('mouseenter', function() { ch.style.display = cv.style.display = 'block'; });
+    document.getElementById('viewer').addEventListener('mouseleave', function() { ch.style.display = cv.style.display = 'none'; dot.style.display = 'none'; });
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+    function animate() {
+        requestAnimationFrame(animate);
+        var phi   = (90 - lat) * Math.PI / 180;
+        var theta = lon * Math.PI / 180;
+        camera.lookAt(500*Math.sin(phi)*Math.cos(theta), 500*Math.cos(phi), 500*Math.sin(phi)*Math.sin(theta));
+        renderer.render(scene, camera);
+    }
+    animate();
+})();
+</script>
+</body>
+</html>

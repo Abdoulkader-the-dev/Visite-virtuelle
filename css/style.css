@@ -126,6 +126,7 @@ button:focus-visible,
     opacity: 0;
     transition: opacity 0.2s ease;
 }
+
 /* Visible quand la souris est sur le sol (classe ajoutée par JS) */
 #camera-marker.visible {
     opacity: 1;
@@ -134,30 +135,38 @@ button:focus-visible,
 /* --- Hotspot de navigation : ellipse + flèche qui suit la souris --- */
 #floor-hotspot {
     position: absolute;
-    width: 120px;
+    width: 128px;
     display: flex;
     align-items: center;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
     opacity: 0;
     pointer-events: none;
-    transform: translate(-50%, -60%);
-    transition: opacity 0.22s ease;
+    transform: translate(-50%, -72%);
+    transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
 /* La flèche SVG — rotation directionnelle appliquée par JS */
 #floor-arrow-svg {
     display: block;
     transition: transform 0.28s ease;
-    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
-    animation: hotspotPulse 1.8s ease-in-out infinite;
+    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.42));
+    animation: hotspotPulse 1.6s ease-in-out infinite;
     transform-origin: center center;
 }
 
 @keyframes hotspotPulse {
-    0%   { opacity: 0.75; }
-    50%  { opacity: 1.00; }
-    100% { opacity: 0.75; }
+    0% {
+        opacity: 0.75;
+    }
+
+    50% {
+        opacity: 1.00;
+    }
+
+    100% {
+        opacity: 0.75;
+    }
 }
 
 /* --- Flèches directionnelles fixes : avancer / reculer --- */
@@ -167,12 +176,14 @@ button:focus-visible,
     bottom: 22%;
     transform: translateX(-50%);
     z-index: 32;
-    display: none;           /* affichées par JS quand souris sur le sol */
+    display: none;
+    /* affichées par JS quand souris sur le sol */
     flex-direction: column;
     align-items: center;
     gap: 2px;
     pointer-events: auto;
 }
+
 #dir-arrows.visible {
     display: flex;
 }
@@ -187,16 +198,24 @@ button:focus-visible,
     transition: opacity 0.15s ease, transform 0.12s ease;
     pointer-events: auto;
 }
-#dir-arrow-fwd:hover { opacity: 1; transform: translateY(-3px); }
-#dir-arrow-bwd:hover { opacity: 1; transform: translateY(3px); }
+
+#dir-arrow-fwd:hover {
+    opacity: 1;
+    transform: translateY(-3px);
+}
+
+#dir-arrow-bwd:hover {
+    opacity: 1;
+    transform: translateY(3px);
+}
 
 #floor-hotspot-label {
     max-width: 132px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.65);
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.58);
     border: 1px solid rgba(255, 255, 255, 0.18);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     line-height: 1.2;
     text-align: center;
@@ -642,10 +661,12 @@ body.xr-active #info-card {
 }
 
 @keyframes pulse {
+
     0%,
     100% {
         box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35), 0 0 24px rgba(255, 255, 255, 0.42);
     }
+
     50% {
         box-shadow: 0 0 0 14px rgba(255, 255, 255, 0), 0 0 30px rgba(255, 255, 255, 0.6);
     }
