@@ -149,24 +149,10 @@ button:focus-visible,
 /* La flèche SVG — rotation directionnelle appliquée par JS */
 #floor-arrow-svg {
     display: block;
-    transition: transform 0.28s ease;
-    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.42));
-    animation: hotspotPulse 1.6s ease-in-out infinite;
+    transition: transform 0.28s ease, filter 0.2s ease;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
     transform-origin: center center;
-}
-
-@keyframes hotspotPulse {
-    0% {
-        opacity: 0.75;
-    }
-
-    50% {
-        opacity: 1.00;
-    }
-
-    100% {
-        opacity: 0.75;
-    }
+    opacity: 0.85;
 }
 
 /* --- Flèches directionnelles fixes : avancer / reculer --- */

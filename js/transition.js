@@ -144,16 +144,62 @@
         }
     }
 
+    function animateTranslationAndCrossfade(targetTexture, duration) {
+        return new Promise(function (resolve) {
+            var start = performance.now();
+            var sphere1 = window.tourState.sphere;
+            var sphere2 = window.tourState.sphere2;
+            var camera = window.tourState.camera;
+            
+            sphere2.material.map = targetTexture;
+            sphere2.material.needsUpdate = true;
+            sphere2.material.opacity = 0;
+            sphere2.visible = true;
+
+            // Compute forward direction
+            var phi = (90 - window.tourState.lat) * Math.PI / 180;
+            var theta = window.tourState.lon * Math.PI / 180;
+            var targetDir = new THREE.Vector3(
+                Math.sin(phi) * Math.cos(theta),
+                Math.cos(phi),
+                Math.sin(phi) * Math.sin(theta)
+            ).normalize();
+
+            function frame(now) {
+                var t = Math.min(1, (now - start) / duration);
+                var easeInOut = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                var easeIn = t * t * t; // Cubic ease in for strong translation effect
+                
+                // Crossfade
+                sphere2.material.opacity = easeInOut;
+                
+                // Camera translation (move up to 350 units forward out of 500 radius)
+                // This causes the natural radial stretch effect at the edges
+                var distance = easeIn * 350;
+                camera.position.copy(targetDir).multiplyScalar(distance);
+
+                if (t < 1) {
+                    requestAnimationFrame(frame);
+                } else {
+                    resolve();
+                }
+            }
+
+            requestAnimationFrame(frame);
+        });
+    }
+
     function startTransition(targetSceneId, options) {
         var sourceSceneId = window.tourState.currentScene;
         var sourceHotspot;
         var sourceLon;
         var targetLon;
+        var sceneConfig = window.TOUR_CONFIG.scenes[targetSceneId];
 
         if (window.tourState.isTransitioning || targetSceneId === window.tourState.currentScene) {
             return;
         }
-        if (!window.TOUR_CONFIG.scenes[targetSceneId]) {
+        if (!sceneConfig) {
             return;
         }
 
@@ -172,35 +218,31 @@
             window.hideFloorHotspot();
         }
 
-        animateLon(sourceLon, 360)
+        // 1. Align camera to hotspot
+        animateLon(sourceLon, 250)
             .then(function () {
-                return animateFov(window.tourState.fov, 38, 420, easeIn);
+                // 2. Load next scene texture in background
+                return window.loadTourTexture(sceneConfig.image);
+            })
+            .then(function (targetTexture) {
+                // 3. Perform 3D translation & crossfade
+                return animateTranslationAndCrossfade(targetTexture, 650);
             })
             .then(function () {
-                return animateBlur(0, 4, 180);
-            })
-            .then(function () {
-                return fadeOverlay(true);
-            })
-            .then(function () {
+                // 4. Reset camera position and setup new scene natively
+                window.tourState.camera.position.set(0, 0, 0);
+                window.tourState.sphere2.visible = false;
+                window.tourState.sphere2.material.opacity = 0;
+                
                 return window.loadScene(targetSceneId, {
                     keepTransitionActive: true,
+                    skipLoadingScreen: true,
                     initialLon: targetLon === null ? sourceLon : targetLon,
                     initialLat: 0,
-                    initialFov: 38
+                    initialFov: 75
                 });
             })
             .then(function () {
-                return fadeOverlay(false);
-            })
-            .then(function () {
-                return animateBlur(4, 0, 220);
-            })
-            .then(function () {
-                return animateFov(38, 75, 520, easeOut);
-            })
-            .then(function () {
-                window.tourState.fov = 75;
                 window.tourState.isTransitioning = false;
                 window.tourState.controlsEnabled = true;
                 window.tourState.lastInteractionTime = Date.now();
@@ -209,11 +251,8 @@
                 console.error(error);
                 window.tourState.isTransitioning = false;
                 window.tourState.controlsEnabled = true;
-                var canvas = document.getElementById('tour-canvas');
-                if (canvas) {
-                    canvas.style.filter = 'blur(0)';
-                }
-                fadeOverlay(false);
+                if (window.tourState.camera) window.tourState.camera.position.set(0, 0, 0);
+                if (window.tourState.sphere2) window.tourState.sphere2.visible = false;
             });
     }
 

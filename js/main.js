@@ -60,6 +60,8 @@
             tryNext();
         });
     }
+    
+    window.loadTourTexture = loadTexture;
 
     function preloadLinkedScenes(sceneId) {
         var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
@@ -142,7 +144,9 @@
         }
 
         window.tourState.isTransitioning = true;
-        showLoading(sceneConfig.name);
+        if (!options.skipLoadingScreen) {
+            showLoading(sceneConfig.name);
+        }
 
         return loadTexture(sceneConfig.image).then(function (texture) {
             window.tourState.sphere.material.map = texture;
@@ -177,7 +181,9 @@
             }
 
             preloadLinkedScenes(sceneId);
-            setTimeout(hideLoading, 120);
+            if (!options.skipLoadingScreen) {
+                setTimeout(hideLoading, 120);
+            }
             if (!options.keepTransitionActive) {
                 window.tourState.isTransitioning = false;
             }
@@ -335,9 +341,16 @@
 
         var geometry = new THREE.SphereGeometry(500, 60, 40);
         geometry.scale(-1, 1, 1);
-        var material = new THREE.MeshBasicMaterial({ map: null, side: THREE.DoubleSide });
+        
+        var material = new THREE.MeshBasicMaterial({ map: null, side: THREE.DoubleSide, transparent: true, opacity: 1 });
         var sphere = new THREE.Mesh(geometry, material);
         scene.add(sphere);
+
+        var material2 = new THREE.MeshBasicMaterial({ map: null, side: THREE.DoubleSide, transparent: true, opacity: 0, depthWrite: false });
+        var sphere2 = new THREE.Mesh(geometry, material2);
+        sphere2.scale.set(0.99, 0.99, 0.99);
+        sphere2.visible = false;
+        scene.add(sphere2);
 
         textureLoader = new THREE.TextureLoader();
         textureLoader.setCrossOrigin('anonymous');
@@ -346,6 +359,7 @@
         window.tourState.renderer = renderer;
         window.tourState.scene = scene;
         window.tourState.sphere = sphere;
+        window.tourState.sphere2 = sphere2;
 
         if (window.initControls) {
             window.initControls();

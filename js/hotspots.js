@@ -160,20 +160,8 @@
             }
 
             // --- NOUVEAU : Création du marqueur 3D pour la VR ---
-            var marker;
-            if (hotspot.type === 'transition') {
-                // Disque au sol pour la navigation
-                var geo = new THREE.CircleGeometry(12, 32);
-                var mat = new THREE.MeshBasicMaterial({
-                    color: 0xffffff,
-                    transparent: true,
-                    opacity: 0.6,
-                    side: THREE.DoubleSide
-                });
-                marker = new THREE.Mesh(geo, mat);
-                // On l'oriente à plat sur le sol (Y = constante)
-                marker.rotation.x = -Math.PI / 2;
-            } else {
+            var marker = null;
+            if (hotspot.type !== 'transition') {
                 // Sprite pour les infos
                 var canvas = document.createElement('canvas');
                 canvas.width = 64;
@@ -193,14 +181,11 @@
                 var spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
                 marker = new THREE.Sprite(spriteMat);
                 marker.scale.set(20, 20, 1);
+                
+                marker.position.copy(hotspot.positionVector);
+                hotspotGroup.add(marker);
+                hotspotMarkers.push({ hotspot: hotspot, marker: marker });
             }
-
-            marker.position.copy(hotspot.positionVector);
-            // Légère compensation pour éviter le z-fighting si au sol
-            if (hotspot.type === 'transition') marker.position.y += 0.5;
-            
-            hotspotGroup.add(marker);
-            hotspotMarkers.push({ hotspot: hotspot, marker: marker });
         });
 
         if (window.tourState.scene) {
@@ -418,9 +403,10 @@
         var infoHit = infoHitFromScreen(event);
         if (infoHit && window.showInfoCard) {
             window.showInfoCard(infoHit.hotspot, event.clientX, event.clientY);
-            return;
         }
+    }
 
+    function onDoubleClick(event) {
         if (window.tourState.activeFloorHotspot && window.startTransition) {
             window.startTransition(window.tourState.activeFloorHotspot.target, {
                 hotspot: window.tourState.activeFloorHotspot
@@ -554,6 +540,7 @@
     window.updateFloorHotspot = updateFloorHotspot;
     window.hideFloorHotspot = hideFloorHotspot;
     window.onValidClick = onValidClick;
+    window.onDoubleClick = onDoubleClick;
     window.handleXRSelect = handleXRSelect;
     window.updateXRGaze = updateXRGaze;
     window.findHotspotFromRay = findHotspotFromRay;

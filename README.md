@@ -1,229 +1,121 @@
-# Google Street View Style 360 Virtual Tour
+# Dynamic Virtual Tour - Google Street View Architecture
 
-This project is a vanilla JavaScript 360 virtual tour built with Three.js r128 from a CDN. It uses classic scripts only: no ES modules, npm, bundler, or build step.
+This project is a high-performance, vanilla JavaScript 360° virtual tour utilizing Three.js. It features a custom "Smart Navigation" system that perfectly mimics the mechanics of Google Street View.
 
-## Prerequisites
+## Core Mechanics
+1. **Interactive Panoramic Graph**: There are no static buttons floating in 3D space. The system treats the entire spherical canvas as an interactive surface.
+2. **Magnetic Cursor Navigation**: A dynamic directional cursor (the chevron arrow) tracks the user's mouse in real time. It calculates the mathematical raycast from the camera to the floor. If a linked panorama exists in the general direction the user is pointing, the cursor automatically rotates to point toward that physical destination.
+3. **Double-Click Dolly-In**: Double-clicking the floor triggers a seamless 3D spatial translation (linear forward movement). The sphere's edges naturally stretch (Radial Stretch/Optical Flow) before executing a zero-black-screen crossfade into the target panorama.
 
-- A modern browser.
-- VS Code with the Live Server extension, or any simple local static server.
-- Optional: a WebXR-compatible device for VR mode, such as Meta Quest, HTC Vive, or a supported mobile browser.
+---
 
-## Add Your 360 Photos
+## 1. Image and Data Architecture (The Panorama Graph)
 
-Put your equirectangular 360 photos in the `images/` folder.
+The entire application state and navigation topology is defined as a directed graph in JSON format inside `js/config.js`. 
 
-The default tour expects:
+Each panorama is a "Node" in the graph, and the `hotspots` array defines the "Edges" (links) to neighboring panoramas.
 
-- `images/1.jpg`
-- `images/2.jpg`
-- `images/3.jpg`
-- `images/4.jpg`
-- `images/5.jpg`
-- `images/6.jpg`
-
-The loader also tries `.JPG`, `.jpeg`, and `.JPEG`, so camera-exported uppercase filenames can still work.
-
-## Add A New Scene
-
-All scene data lives in [js/config.js](js/config.js).
-
-Add a new scene inside `window.TOUR_CONFIG.scenes`:
-
+### The Structure
 ```javascript
-'7': {
-    name: 'Bureau',
-    image: './images/7.jpg',
-    minimapX: 45,
-    minimapY: 30,
-    hotspots: [
-        {
-            position: { x: 200, y: 0, z: -220 },
-            type: 'transition',
-            target: '1',
-            label: 'Retour'
+window.TOUR_CONFIG = {
+    scenes: {
+        'node_id_1': { // Unique identifier for the panorama
+            name: 'Main Hall', // Human-readable name
+            image: './images/pano1.jpg', // Path to the equirectangular image
+            minimapX: 50, // UI Coordinate (0-100)
+            minimapY: 85, // UI Coordinate (0-100)
+            hotspots: [ // Edges/Links to neighboring panoramas
+                { 
+                    target: 'node_id_2', 
+                    type: 'transition', 
+                    position: { x: 0, y: -20, z: -280 }, 
+                    label: 'Next Room' 
+                }
+            ]
         }
+    }
+}
+```
+
+### Understanding Spatial Coordinates (Bearings)
+The `position` object dictates the **direction** the target panorama is located physically relative to the current panorama's center.
+* `x`: Left (-) to Right (+)
+* `y`: Down (-) to Up (+) *(Usually set to -20 for floor navigation)*
+* `z`: Forward (-) to Backward (+)
+
+The system uses these coordinates to calculate the `Math.atan2()` angle. When the user looks at the floor, the system checks the angular distance between the mouse pointer and all `transition` hotspots, snapping the cursor to the nearest one.
+
+---
+
+## 2. How to Modify / Scale (Adding New Panoramas)
+
+Scaling the tour is purely a data-entry task. No core JavaScript logic needs to be modified to add 10 or 10,000 panoramas.
+
+### Step-by-Step Guide: Adding a new connected room
+
+#### 1. Add the Image
+Place your equirectangular 360° image (e.g., `new_room.jpg`) into the `images/` directory.
+
+#### 2. Define the New Node
+Open `js/config.js` and add a new entry to `window.TOUR_CONFIG.scenes`:
+```javascript
+'new_room_id': {
+    name: 'The New Room',
+    image: './images/new_room.jpg',
+    minimapX: 60,
+    minimapY: 40,
+    hotspots: [
+        // We must provide a way BACK to the previous room
+        { position: { x: 0, y: -20, z: 280 }, type: 'transition', target: 'existing_room_id' }
     ]
 }
 ```
 
-Then add transition hotspots from other scenes that point to the new scene.
+#### 3. Link the Existing Room to the New Room
+Find the node you want to connect FROM (e.g., `'existing_room_id'`), and add an edge pointing TO your new room. You must determine the relative physical direction.
 
-## Hotspot Positions
-
-Hotspot positions use a 3D coordinate system inside the panorama sphere:
-
-- `x`: left/right direction.
-- `y`: vertical direction. Positive is up, negative is down.
-- `z`: forward/back direction. Negative Z = in front of the camera at start.
-
-Examples:
-
+If the new room is straight ahead:
 ```javascript
-{ x: 150, y: 0, z: -250 }   // slightly right, in front
-{ x: -250, y: 0, z: -150 }  // left, slightly in front
-{ x: 0, y: 200, z: -250 }   // straight ahead, high up (info hotspot)
+{ position: { x: 0, y: -20, z: -280 }, type: 'transition', target: 'new_room_id' }
 ```
 
-Navigation hotspots are not drawn at their fixed 3D position. Instead, the app tracks the mouse ray on the floor and shows the nearest transition hotspot as a moving directional arrow. Info hotspots are projected to the screen every frame and shown as glowing dots.
+If the new room is to the right:
+```javascript
+{ position: { x: 280, y: -20, z: 0 }, type: 'transition', target: 'new_room_id' }
+```
+
+#### 4. Adjusting the Angle (Bearing)
+If the magnetic cursor points slightly off from where you want it:
+1. Open the tour in your browser.
+2. Adjust the `x` and `z` values of the `position` object.
+3. **Formula**: `Direction Angle = Math.atan2(x, -z)`. 
+   - `x: 0, z: -100` = 0° (Straight ahead)
+   - `x: 100, z: 0` = 90° (Right)
+   - `x: 0, z: 100` = 180° (Behind)
+   - `x: -100, z: 0` = -90° (Left)
+
+### Optional: Information Nodes
+You can also add static floating information panels using `type: 'info'`:
+```javascript
+{ position: { x: 100, y: 10, z: -150 }, type: 'info', icon: 'i', title: 'Machine', description: 'Technical specs here.' }
+```
+These trigger on a **single click**, while transitions trigger on a **double click**.
 
 ---
 
-## Floor Navigation Arrow — How It Works
+## 3. Customizing the Dynamic Cursor
 
-The floor hotspot is a **directional arrow** that appears when the mouse moves toward the bottom of the panorama (the "floor" area). It works like Google Street View: the arrow pivots to point toward the destination scene.
+The chevron arrow is a pure SVG injected into the DOM and managed via CSS/JS.
 
-### Visual structure
+**To change the shape:**
+Edit the `<svg id="floor-arrow-svg">` path in `index.html`.
 
-The arrow is an inline SVG defined in `index.html` inside `#hotspot-container`:
+**To change the color/opacity:**
+Edit the `fill` attribute of the SVG in `index.html`. For example, `fill="rgba(200, 200, 200, 0.6)"` creates a sleek, transparent gray.
 
-```html
-<div id="floor-hotspot">
-  <svg id="floor-arrow-svg" ...>
-    <ellipse .../>          <!-- ground shadow -->
-    <polygon .../>          <!-- arrowhead -->
-    <polygon .../>          <!-- arrow tail -->
-    <circle  .../>          <!-- center dot (accent color) -->
-  </svg>
-  <div id="floor-hotspot-label"></div>
-</div>
-```
-
-### How to change the arrow color
-
-Edit the `fill` attributes directly on the `<polygon>` elements in `index.html`:
-
-```html
-<!-- White arrow (default) -->
-<polygon points="40,8 54,38 40,30 26,38" fill="#ffffff" fill-opacity="0.95" />
-
-<!-- Blue arrow -->
-<polygon points="40,8 54,38 40,30 26,38" fill="#3B82F6" fill-opacity="0.95" />
-```
-
-Or override via CSS in `css/style.css`:
-
-```css
-#floor-arrow-svg polygon { fill: #your-color; }
-```
-
-The center dot color is set in CSS on the `<circle>` fill attribute. It uses `#3B82F6` (the project accent color) by default.
-
-### How to change the arrow size
-
-Change `width` and `height` on both `#floor-hotspot` (the wrapper) and `#floor-arrow-svg` (the SVG) in `css/style.css`. Keep them the same value so centering stays correct:
-
-```css
-#floor-hotspot { width: 80px; }      /* change both */
-#floor-arrow-svg { width: 80px; height: 80px; }
-```
-
-### How to change the pulse animation
-
-Edit `@keyframes arrowPulse` in `css/style.css`:
-
-```css
-@keyframes arrowPulse {
-    0%   { opacity: 0.80; transform: scale(0.92); }
-    50%  { opacity: 1.00; transform: scale(1.05); }  /* peak brightness */
-    100% { opacity: 0.80; transform: scale(0.92); }
-}
-```
-
-### How the direction is calculated
-
-The rotation is computed in `js/hotspots.js` inside `computeArrowAngle()`:
-
+**To change the detection threshold (When it appears):**
+In `js/hotspots.js`, locate:
 ```javascript
-function computeArrowAngle(hotspot) {
-    var pos = hotspot.positionVector;
-    // Absolute angle of the hotspot in the horizontal plane
-    var hotspotAngleDeg = Math.atan2(pos.x, -pos.z) * (180 / Math.PI);
-    // Subtract the current camera heading so the arrow is screen-relative
-    var relativeAngle = hotspotAngleDeg - window.tourState.lon;
-    return relativeAngle;
-}
+var onFloor = sphereLat < -10;
 ```
-
-To **disable** directional rotation (always point up): `return 0;`  
-To **invert** the direction: change `atan2(pos.x, -pos.z)` to `atan2(-pos.x, pos.z)`
-
-The computed angle is applied in `updateFloorHotspot()` as a CSS `transform: rotate(Xdeg)` on `#floor-arrow-svg`.
-
-### How to change the floor detection threshold
-
-The arrow only appears when the mouse is below a certain vertical angle. Adjust the threshold in `js/hotspots.js` → `updateFloorHotspot()`:
-
-```javascript
-if (sphereLat < -10) {   // -10° = 10 degrees below the horizon
-```
-
-Increase toward 0 to make the arrow appear sooner (higher on screen).  
-Decrease toward -30 to require the mouse to be much lower before it appears.
-
----
-
-## Minimap Positions
-
-Each scene has:
-
-```javascript
-minimapX: 50,
-minimapY: 80
-```
-
-These values are percentages from `0` to `100`.
-
-- `minimapX: 0` is the left edge.
-- `minimapX: 100` is the right edge.
-- `minimapY: 0` is the top edge.
-- `minimapY: 100` is the bottom edge.
-
-The minimap automatically draws dots and connection lines based on transition hotspots.
-
-## Branding And Colors
-
-The bottom-center camera watermark is in [index.html](index.html), inside `#camera-logo`.
-
-The visual theme is in [css/style.css](css/style.css). The main accent color is:
-
-```css
-#3B82F6
-```
-
-Change this value in the CSS to customize active states, minimap highlights, zoom accents, and VR reticle progress.
-
-## Run The Project
-
-Recommended:
-
-1. Open the project folder in VS Code.
-2. Right-click `index.html`.
-3. Choose `Open with Live Server`.
-
-Directly opening `index.html` may work in some browsers, but a local server is more reliable for image loading, CDN scripts, and WebXR.
-
-## Controls
-
-- Drag mouse or one finger: rotate view.
-- Mouse wheel: zoom field of view.
-- Pinch with two fingers: zoom field of view.
-- Idle for 5 seconds: slow auto-rotation starts.
-- Move mouse toward the floor: navigation hotspot appears and follows the pointer.
-- Click without dragging: activates the current floor hotspot.
-- Click glowing info dots: opens an info card.
-- Use the menu or minimap dots to move between scenes.
-- Use `+` and `-` to smoothly zoom.
-
-## VR Mode
-
-On supported devices, a VR button appears near the bottom center.
-
-In VR:
-
-- Three.js uses `renderer.xr.enabled = true`.
-- The animation loop uses `renderer.setAnimationLoop(...)`.
-- HTML panels are hidden during the XR session.
-- Controller rays are visible.
-- Controller select can trigger transition or info hotspots.
-- A center reticle supports gaze-based navigation.
-- VR info cards are rendered as Three.js canvas-textured panels in world space.
+Change `-10` to `-20` if you want the user to look further down before the cursor appears.

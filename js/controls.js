@@ -109,6 +109,12 @@
             trackMouseOnSphere(event);
         });
 
+        dom.addEventListener('dblclick', function (event) {
+            if (window.onDoubleClick) {
+                window.onDoubleClick(event);
+            }
+        });
+
         window.addEventListener('mousemove', function (event) {
             movePointer(event.clientX, event.clientY);
             trackMouseOnSphere(event);

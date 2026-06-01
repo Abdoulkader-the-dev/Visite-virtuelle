@@ -45,75 +45,15 @@
             MODIFIER LES HOTSPOTS   → js/config.js, tableau hotspots[] de chaque scène
         -->
 
-        <!-- 1. Croix X — marque la position de la caméra au sol -->
-        <div id="camera-marker" aria-hidden="true">
-            <svg viewBox="0 0 60 60" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
-                <!-- Ellipse de perspective au sol -->
-                <ellipse cx="30" cy="44" rx="24" ry="8"
-                    fill="none" stroke="rgba(255,255,255,0.30)" stroke-width="1.5"/>
-                <!-- Bras de la croix X -->
-                <line x1="12" y1="12" x2="48" y2="48"
-                    stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
-                <line x1="48" y1="12" x2="12" y2="48"
-                    stroke="white" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
-            </svg>
-        </div>
-
         <!-- 2. Hotspot de navigation : ellipse plate + flèche directionnelle -->
-        <!--
-            La flèche (#floor-arrow-svg) pivote via JS pour pointer vers la cible.
-            L'ellipse simule la perspective d'un objet posé à plat sur le sol.
-            Le label affiche le nom de la scène cible.
-        -->
         <div id="floor-hotspot">
             <svg id="floor-arrow-svg" viewBox="0 0 128 74" width="128" height="74"
                 xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <!--
-                    ELLIPSE DE SOL
-                    Simule un disque vu en perspective (aplati).
-                    Modifier rx/ry pour changer les proportions.
-                    Modifier fill pour changer la couleur de fond.
-                -->
-                <ellipse cx="64" cy="48" rx="50" ry="17"
-                    fill="rgba(0,0,0,0.10)"
-                    stroke="rgba(255,255,255,0.55)" stroke-width="1.2"/>
-
-                <!--
-                    FLÈCHE DIRECTIONNELLE PLATE
-                    Pointe vers le haut (0°) par défaut.
-                    La rotation est appliquée par JS sur #floor-arrow-svg.
-                    Modifier les points pour changer la forme de la flèche.
-                    Modifier fill pour changer la couleur.
-                -->
-                <path d="M64 12 L104 47 L82 42 L64 56 L46 42 L24 47 Z"
-                    fill="rgba(255,255,255,0.88)"/>
-                <!-- Tige de la flèche -->
-                <path d="M64 24 L88 45 L75 42 L64 50 L53 42 L40 45 Z"
-                    fill="rgba(255,255,255,0.34)"/>
+                <!-- Chevron épais façon Street View (angle 90°) -->
+                <path d="M 64 5 L 114 55 L 94 75 L 64 45 L 34 75 L 14 55 Z"
+                    fill="rgba(200, 200, 200, 0.6)" />
             </svg>
-            <div id="floor-hotspot-label"></div>
-        </div>
-
-        <!-- 3. Flèches directionnelles fixes — avancer/reculer sans tourner -->
-        <!--
-            Ces flèches sont positionnées au centre de l'écran (bas).
-            Elles permettent d'aller vers la scène suivante/précédente
-            dans l'axe de vue actuel, sans rotation de caméra.
-            Gérées par js/hotspots.js → initDirArrows()
-        -->
-        <div id="dir-arrows" aria-label="Navigation directionnelle">
-            <button id="dir-arrow-fwd" type="button" aria-label="Avancer">
-                <svg viewBox="0 0 44 24" width="44" height="24" xmlns="http://www.w3.org/2000/svg">
-                    <polygon points="22,2 42,22 22,15 2,22"
-                        fill="white" fill-opacity="0.90"/>
-                </svg>
-            </button>
-            <button id="dir-arrow-bwd" type="button" aria-label="Reculer">
-                <svg viewBox="0 0 44 24" width="44" height="24" xmlns="http://www.w3.org/2000/svg">
-                    <polygon points="22,22 42,2 22,9 2,2"
-                        fill="white" fill-opacity="0.55"/>
-                </svg>
-            </button>
+            <div id="floor-hotspot-label" style="display: none;"></div>
         </div>
 
         <div id="info-hotspot-layer"></div>
