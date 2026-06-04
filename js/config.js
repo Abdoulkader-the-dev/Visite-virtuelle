@@ -27,9 +27,9 @@
                 image: './images/12.JPG',
                 minimapX: 50, minimapY: 85,
                 hotspots: [
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '13', label: "Salle d'attente" },
-                    { position: { x: 200, y: -20, z: -180 }, type: 'transition', target: '16', label: 'Zone 16' },
-                    { position: { x:-200, y: -20, z: -180 }, type: 'transition', target: '17', label: 'Salle collaborative' }
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '13', bearing: 0, label: "Salle d'attente" },
+                    { position: { x: 200, y: -20, z: -180 }, type: 'transition', target: '16', bearing: 48, label: 'Zone 16' },
+                    { position: { x:-200, y: -20, z: -180 }, type: 'transition', target: '17', bearing: 312, label: 'Salle collaborative' }
                 ]
             },
 
@@ -39,9 +39,9 @@
                 image: './images/13.JPG',
                 minimapX: 35, minimapY: 65,
                 hotspots: [
-                    { position: { x:-150, y: -20, z: -220 }, type: 'transition', target: '14', label: 'Zone 14' },
-                    { position: { x: 150, y: -20, z: -220 }, type: 'transition', target: '15', label: 'Zone 15' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '12', label: 'Entrée' }
+                    { position: { x:-150, y: -20, z: -220 }, type: 'transition', target: '14', bearing: 325.7, label: 'Zone 14' },
+                    { position: { x: 150, y: -20, z: -220 }, type: 'transition', target: '15', bearing: 34.3, label: 'Zone 15' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '12', bearing: 180, label: 'Entrée' }
                 ]
             },
 
@@ -51,7 +51,7 @@
                 image: './images/14.JPG',
                 minimapX: 20, minimapY: 50,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '13', label: "Retour salle d'attente" }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '13', bearing: 180, label: "Retour salle d'attente" }
                 ]
             },
             '15': {
@@ -59,7 +59,7 @@
                 image: './images/15.JPG',
                 minimapX: 50, minimapY: 50,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '13', label: "Retour salle d'attente" }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '13', bearing: 180, label: "Retour salle d'attente" }
                 ]
             },
 
@@ -69,7 +69,7 @@
                 image: './images/16.JPG',
                 minimapX: 65, minimapY: 70,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '12', label: 'Retour Entrée' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '12', bearing: 180, label: 'Retour Entrée' }
                 ]
             },
 
@@ -79,12 +79,12 @@
                 image: './images/17.JPG',
                 minimapX: 30, minimapY: 40,
                 hotspots: [
-                    { position: { x:-250, y: -20, z: -150 }, type: 'transition', target: '18', label: 'Zone 18' },
-                    { position: { x:-150, y: -20, z: -220 }, type: 'transition', target: '19', label: 'Zone 19' },
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '20', label: 'Zone 20' },
-                    { position: { x: 150, y: -20, z: -220 }, type: 'transition', target: '21', label: 'Zone 21' },
-                    { position: { x: 280, y: -20, z:    0 }, type: 'transition', target: '12', label: 'Entrée' },
-                    { position: { x: 250, y: -20, z: -150 }, type: 'transition', target: '22', label: 'Couloire' }
+                    { position: { x:-250, y: -20, z: -150 }, type: 'transition', target: '18', bearing: 301, label: 'Zone 18' },
+                    { position: { x:-150, y: -20, z: -220 }, type: 'transition', target: '19', bearing: 325.7, label: 'Zone 19' },
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '20', bearing: 0, label: 'Zone 20' },
+                    { position: { x: 150, y: -20, z: -220 }, type: 'transition', target: '21', bearing: 34.3, label: 'Zone 21' },
+                    { position: { x: 280, y: -20, z:    0 }, type: 'transition', target: '12', bearing: 90, label: 'Entrée' },
+                    { position: { x: 250, y: -20, z: -150 }, type: 'transition', target: '22', bearing: 59, label: 'Couloire' }
                 ]
             },
 
@@ -94,7 +94,7 @@
                 image: './images/18.JPG',
                 minimapX: 15, minimapY: 28,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', label: 'Retour salle collaborative' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', bearing: 180, label: 'Retour salle collaborative' }
                 ]
             },
             '19': {
@@ -102,7 +102,7 @@
                 image: './images/19.JPG',
                 minimapX: 25, minimapY: 20,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', label: 'Retour salle collaborative' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', bearing: 180, label: 'Retour salle collaborative' }
                 ]
             },
             '20': {
@@ -110,7 +110,7 @@
                 image: './images/20.JPG',
                 minimapX: 40, minimapY: 15,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', label: 'Retour salle collaborative' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', bearing: 180, label: 'Retour salle collaborative' }
                 ]
             },
             '21': {
@@ -118,7 +118,7 @@
                 image: './images/21.JPG',
                 minimapX: 55, minimapY: 20,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', label: 'Retour salle collaborative' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', bearing: 180, label: 'Retour salle collaborative' }
                 ]
             },
 
@@ -128,8 +128,8 @@
                 image: './images/22.JPG',
                 minimapX: 70, minimapY: 40,
                 hotspots: [
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '23', label: 'Suite couloire' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', label: 'Retour salle collaborative' }
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '23', bearing: 0, label: 'Suite couloire' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '17', bearing: 180, label: 'Retour salle collaborative' }
                 ]
             },
             '23': {
@@ -137,9 +137,9 @@
                 image: './images/23.JPG',
                 minimapX: 70, minimapY: 30,
                 hotspots: [
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '24', label: 'Suite couloire' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '22', label: 'Retour couloire' },
-                    { position: { x: 280, y: -20, z:    0 }, type: 'transition', target: '27', label: 'Design Lab' }
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '24', bearing: 0, label: 'Suite couloire' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '22', bearing: 180, label: 'Retour couloire' },
+                    { position: { x: 280, y: -20, z:    0 }, type: 'transition', target: '27', bearing: 90, label: 'Design Lab' }
                 ]
             },
             '24': {
@@ -147,8 +147,8 @@
                 image: './images/24.JPG',
                 minimapX: 70, minimapY: 20,
                 hotspots: [
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '25', label: 'Suite couloire' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '23', label: 'Retour couloire' }
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '25', bearing: 0, label: 'Suite couloire' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '23', bearing: 180, label: 'Retour couloire' }
                 ]
             },
             '25': {
@@ -156,9 +156,9 @@
                 image: './images/25.JPG',
                 minimapX: 70, minimapY: 10,
                 hotspots: [
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '26', label: 'Suite couloire' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '24', label: 'Retour couloire' },
-                    { position: { x:-280, y: -20, z:    0 }, type: 'transition', target: '32', label: 'Makerspace' }
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '26', bearing: 0, label: 'Suite couloire' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '24', bearing: 180, label: 'Retour couloire' },
+                    { position: { x:-280, y: -20, z:    0 }, type: 'transition', target: '32', bearing: 270, label: 'Makerspace' }
                 ]
             },
             '26': {
@@ -166,7 +166,7 @@
                 image: './images/26.JPG',
                 minimapX: 70, minimapY: 2,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '25', label: 'Retour couloire' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '25', bearing: 180, label: 'Retour couloire' }
                 ]
             },
 
@@ -176,11 +176,11 @@
                 image: './images/27.JPG',
                 minimapX: 85, minimapY: 30,
                 hotspots: [
-                    { position: { x:-200, y: -20, z: -200 }, type: 'transition', target: '28', label: 'Design Lab 28' },
-                    { position: { x: 200, y: -20, z: -200 }, type: 'transition', target: '29', label: 'Design Lab 29' },
-                    { position: { x:-200, y: -20, z:  200 }, type: 'transition', target: '30', label: 'Design Lab 30' },
-                    { position: { x: 200, y: -20, z:  200 }, type: 'transition', target: '31', label: 'Design Lab 31' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '23', label: 'Retour couloire' }
+                    { position: { x:-200, y: -20, z: -200 }, type: 'transition', target: '28', bearing: 315, label: 'Design Lab 28' },
+                    { position: { x: 200, y: -20, z: -200 }, type: 'transition', target: '29', bearing: 45, label: 'Design Lab 29' },
+                    { position: { x:-200, y: -20, z:  200 }, type: 'transition', target: '30', bearing: 225, label: 'Design Lab 30' },
+                    { position: { x: 200, y: -20, z:  200 }, type: 'transition', target: '31', bearing: 135, label: 'Design Lab 31' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '23', bearing: 180, label: 'Retour couloire' }
                 ]
             },
             '28': {
@@ -188,7 +188,7 @@
                 image: './images/28.JPG',
                 minimapX: 90, minimapY: 22,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', label: 'Retour Design Lab' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', bearing: 180, label: 'Retour Design Lab' }
                 ]
             },
             '29': {
@@ -196,7 +196,7 @@
                 image: './images/29.JPG',
                 minimapX: 95, minimapY: 30,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', label: 'Retour Design Lab' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', bearing: 180, label: 'Retour Design Lab' }
                 ]
             },
             '30': {
@@ -204,7 +204,7 @@
                 image: './images/30.JPG',
                 minimapX: 90, minimapY: 38,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', label: 'Retour Design Lab' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', bearing: 180, label: 'Retour Design Lab' }
                 ]
             },
             '31': {
@@ -212,7 +212,7 @@
                 image: './images/31.JPG',
                 minimapX: 95, minimapY: 46,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', label: 'Retour Design Lab' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '27', bearing: 180, label: 'Retour Design Lab' }
                 ]
             },
 
@@ -222,10 +222,10 @@
                 image: './images/32.JPG',
                 minimapX: 55, minimapY: 10,
                 hotspots: [
-                    { position: { x:-200, y: -20, z: -200 }, type: 'transition', target: '33', label: 'Makerspace 33' },
-                    { position: { x: 200, y: -20, z: -200 }, type: 'transition', target: '34', label: 'Makerspace 34' },
-                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '35', label: 'Makerspace 35' },
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '25', label: 'Retour couloire' }
+                    { position: { x:-200, y: -20, z: -200 }, type: 'transition', target: '33', bearing: 315, label: 'Makerspace 33' },
+                    { position: { x: 200, y: -20, z: -200 }, type: 'transition', target: '34', bearing: 45, label: 'Makerspace 34' },
+                    { position: { x:   0, y: -20, z: -280 }, type: 'transition', target: '35', bearing: 0, label: 'Makerspace 35' },
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '25', bearing: 180, label: 'Retour couloire' }
                 ]
             },
             '33': {
@@ -233,7 +233,7 @@
                 image: './images/33.JPG',
                 minimapX: 45, minimapY: 4,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '32', label: 'Retour Makerspace' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '32', bearing: 180, label: 'Retour Makerspace' }
                 ]
             },
             '34': {
@@ -241,7 +241,7 @@
                 image: './images/34.JPG',
                 minimapX: 55, minimapY: 2,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '32', label: 'Retour Makerspace' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '32', bearing: 180, label: 'Retour Makerspace' }
                 ]
             },
             '35': {
@@ -249,7 +249,7 @@
                 image: './images/35.JPG',
                 minimapX: 65, minimapY: 4,
                 hotspots: [
-                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '32', label: 'Retour Makerspace' }
+                    { position: { x:   0, y: -20, z:  280 }, type: 'transition', target: '32', bearing: 180, label: 'Retour Makerspace' }
                 ]
             }
         }

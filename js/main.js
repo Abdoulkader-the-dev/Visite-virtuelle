@@ -14,6 +14,12 @@
                 if (!hotspot.positionVector) {
                     hotspot.positionVector = vectorFromConfig(hotspot.position);
                 }
+                if (hotspot.type === 'transition' && typeof hotspot.bearing !== 'number') {
+                    hotspot.bearing = Math.atan2(hotspot.position.x, -hotspot.position.z) * 180 / Math.PI;
+                    if (hotspot.bearing < 0) {
+                        hotspot.bearing += 360;
+                    }
+                }
             });
         });
     }
@@ -120,6 +126,13 @@
         }
 
         loadNext(remainingIds, 0);
+    }
+
+    function createSphere() {
+        var geo = new THREE.SphereGeometry(500, 60, 40);
+        geo.scale(-1, 1, 1);
+        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1 });
+        return new THREE.Mesh(geo, mat);
     }
 
     function showLoading(sceneName) {
@@ -339,15 +352,12 @@
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
 
-        var geometry = new THREE.SphereGeometry(500, 60, 40);
-        geometry.scale(-1, 1, 1);
-        
-        var material = new THREE.MeshBasicMaterial({ map: null, side: THREE.DoubleSide, transparent: true, opacity: 1 });
-        var sphere = new THREE.Mesh(geometry, material);
+        var sphere = createSphere();
         scene.add(sphere);
 
-        var material2 = new THREE.MeshBasicMaterial({ map: null, side: THREE.DoubleSide, transparent: true, opacity: 0, depthWrite: false });
-        var sphere2 = new THREE.Mesh(geometry, material2);
+        var sphere2 = createSphere();
+        sphere2.material.opacity = 0;
+        sphere2.material.depthWrite = false;
         sphere2.scale.set(0.99, 0.99, 0.99);
         sphere2.visible = false;
         scene.add(sphere2);
@@ -384,6 +394,7 @@
     window.loadScene = loadScene;
     window.preloadAllScenes = preloadAllScenes;
     window.updateCameraLookAt = updateCameraLookAt;
+    window.createSphere = createSphere;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

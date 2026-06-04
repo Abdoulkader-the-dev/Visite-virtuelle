@@ -47,10 +47,24 @@
     var infoElements = [];
     var xrRaycaster = new THREE.Raycaster();
     var tempMatrix = new THREE.Matrix4();
+    var groundRaycaster = new THREE.Raycaster();
+    var mouseNDC = new THREE.Vector2(0, 0);
+    var GROUND_RADIUS = 3.5;
+    var GROUND_Y = -2;
+    var GROUND_HOTSPOT_INNER_RADIUS = 0.24;
+    var GROUND_HOTSPOT_OUTER_RADIUS = 0.72;
+    var GROUND_HOTSPOT_ARROW_SCALE = 0.68;
+    var MIN_FOLLOW_RADIUS = 1.2;
+    var MAX_FOLLOW_RADIUS = 8;
+    var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
+    var groundPoint = new THREE.Vector3();
 
     // Groupes pour les hotspots 3D (visibles en VR)
     var hotspotGroup = new THREE.Group();
     var hotspotMarkers = [];
+    var groundHotspotGroup = new THREE.Group();
+    var groundHotspotEntry = null;
+    var allGroundHotspotMeshes = [];
 
     function currentHotspots() {
         return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots;
@@ -123,6 +137,119 @@
         return relativeAngle;
     }
 
+    function bearingForHotspot(hotspot) {
+        var bearing;
+
+        if (typeof hotspot.bearing === 'number') {
+            return hotspot.bearing;
+        }
+
+        bearing = Math.atan2(hotspot.position.x, -hotspot.position.z) * 180 / Math.PI;
+        if (bearing < 0) {
+            bearing += 360;
+        }
+        hotspot.bearing = bearing;
+        return bearing;
+    }
+
+    function disposeMaterial(material) {
+        if (!material) {
+            return;
+        }
+        if (Array.isArray(material)) {
+            material.forEach(disposeMaterial);
+            return;
+        }
+        if (material.map) {
+            material.map.dispose();
+        }
+        material.dispose();
+    }
+
+    function disposeObject3D(object) {
+        object.traverse(function (child) {
+            if (child.geometry) {
+                child.geometry.dispose();
+            }
+            if (child.material) {
+                disposeMaterial(child.material);
+            }
+        });
+    }
+
+    function clearGroundHotspots() {
+        if (window.tourState.scene) {
+            window.tourState.scene.remove(groundHotspotGroup);
+        }
+        disposeObject3D(groundHotspotGroup);
+        groundHotspotGroup = new THREE.Group();
+        groundHotspotEntry = null;
+        allGroundHotspotMeshes = [];
+    }
+
+    function createGroundHotspot() {
+        var bearingRad = 0;
+        var ringGeo = new THREE.RingGeometry(GROUND_HOTSPOT_INNER_RADIUS, GROUND_HOTSPOT_OUTER_RADIUS, 64);
+        var ringMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        var hotspotMesh;
+        var arrowShape;
+        var arrowGeo;
+        var arrowMesh;
+        var arrowMat;
+
+        if (groundHotspotEntry) {
+            return;
+        }
+
+        ringGeo.rotateX(-Math.PI / 2);
+        hotspotMesh = new THREE.Mesh(ringGeo, ringMat);
+        hotspotMesh.position.set(
+            Math.sin(bearingRad) * GROUND_RADIUS,
+            GROUND_Y,
+            -Math.cos(bearingRad) * GROUND_RADIUS
+        );
+        hotspotMesh.rotation.y = bearingRad;
+        hotspotMesh.renderOrder = 5;
+
+        arrowShape = new THREE.Shape();
+        arrowShape.moveTo(0, 0.3 * GROUND_HOTSPOT_ARROW_SCALE);
+        arrowShape.lineTo(0.2 * GROUND_HOTSPOT_ARROW_SCALE, 0);
+        arrowShape.lineTo(0, 0.1 * GROUND_HOTSPOT_ARROW_SCALE);
+        arrowShape.lineTo(-0.2 * GROUND_HOTSPOT_ARROW_SCALE, 0);
+        arrowShape.closePath();
+
+        arrowGeo = new THREE.ShapeGeometry(arrowShape);
+        arrowGeo.rotateX(-Math.PI / 2);
+        arrowMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
+        arrowMesh.position.copy(hotspotMesh.position);
+        arrowMesh.position.y += 0.01;
+        arrowMesh.rotation.y = bearingRad;
+        arrowMesh.renderOrder = 6;
+
+        groundHotspotGroup.add(hotspotMesh);
+        groundHotspotGroup.add(arrowMesh);
+        groundHotspotEntry = {
+            hotspot: null,
+            ring: hotspotMesh,
+            arrow: arrowMesh,
+            opacity: 0
+        };
+        allGroundHotspotMeshes.push(hotspotMesh, arrowMesh);
+    }
+
     function initHotspots() {
         floorHotspot = document.getElementById('floor-hotspot');
         floorLabel = document.getElementById('floor-hotspot-label');
@@ -130,13 +257,19 @@
         cameraMarker = document.getElementById('camera-marker');
         dirArrows = document.getElementById('dir-arrows');
         infoLayer = document.getElementById('info-hotspot-layer');
+        if (floorHotspot) {
+            floorHotspot.style.display = 'none';
+        }
         infoLayer.innerHTML = '';
         infoElements = [];
+
+        clearGroundHotspots();
 
         // Nettoyage des anciens marqueurs 3D
         if (window.tourState.scene) {
             window.tourState.scene.remove(hotspotGroup);
         }
+        disposeObject3D(hotspotGroup);
         hotspotGroup = new THREE.Group();
         hotspotMarkers = [];
 
@@ -160,6 +293,10 @@
             }
 
             // --- NOUVEAU : Création du marqueur 3D pour la VR ---
+            if (hotspot.type === 'transition') {
+                createGroundHotspot();
+            }
+
             var marker = null;
             if (hotspot.type !== 'transition') {
                 // Sprite pour les infos
@@ -190,6 +327,7 @@
 
         if (window.tourState.scene) {
             window.tourState.scene.add(hotspotGroup);
+            window.tourState.scene.add(groundHotspotGroup);
         }
 
         // --- Bouton Quitter VR (3D) ---
@@ -228,16 +366,16 @@
         if (fwdBtn) {
             fwdBtn.onclick = function () {
                 var hotspot = bestHotspotInView(+1);
-                if (hotspot && window.startTransition) {
-                    window.startTransition(hotspot.target, { hotspot: hotspot });
+                if (hotspot && window.triggerGSVTransition) {
+                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
                 }
             };
         }
         if (bwdBtn) {
             bwdBtn.onclick = function () {
                 var hotspot = bestHotspotInView(-1);
-                if (hotspot && window.startTransition) {
-                    window.startTransition(hotspot.target, { hotspot: hotspot });
+                if (hotspot && window.triggerGSVTransition) {
+                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
                 }
             };
         }
@@ -298,6 +436,8 @@
             return;
         }
 
+        updateGroundHotspots();
+
         // En mode VR, on cache les hotspots HTML (car ils sont invisibles dans le casque
         // et polluent l'écran du PC) et on s'assure que les hotspots 3D sont visibles.
         var isVR = window.tourState.isXRActive;
@@ -326,7 +466,74 @@
         });
     }
 
+    function updateGroundHotspots() {
+        var camera = window.tourState.camera;
+        var targetOpacity = 0;
+        var horizontalLength;
+        var scale;
+        var nearest;
+        var bearingRad;
+
+        if (!camera || !groundHotspotEntry) {
+            return;
+        }
+
+        if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
+            mouseNDC.set(
+                (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
+                -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
+            );
+        }
+
+        groundRaycaster.setFromCamera(mouseNDC, camera);
+
+        if (
+            !window.tourState.isTransitioning &&
+            window.tourState.mouseSphereLat !== null &&
+            window.tourState.mouseSphereLat < -10 &&
+            groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
+        ) {
+            horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
+            if (horizontalLength > MAX_FOLLOW_RADIUS) {
+                scale = MAX_FOLLOW_RADIUS / horizontalLength;
+                groundPoint.x *= scale;
+                groundPoint.z *= scale;
+            } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
+                scale = MIN_FOLLOW_RADIUS / horizontalLength;
+                groundPoint.x *= scale;
+                groundPoint.z *= scale;
+            }
+
+            nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
+            if (nearest) {
+                bearingRad = bearingForHotspot(nearest) * Math.PI / 180;
+                groundHotspotEntry.hotspot = nearest;
+                groundHotspotEntry.ring.position.copy(groundPoint);
+                groundHotspotEntry.arrow.position.copy(groundPoint);
+                groundHotspotEntry.arrow.position.y += 0.01;
+                groundHotspotEntry.ring.rotation.y = bearingRad;
+                groundHotspotEntry.arrow.rotation.y = bearingRad;
+                groundHotspotEntry.ring.userData.hotspot = nearest;
+                groundHotspotEntry.arrow.userData.hotspot = nearest;
+                targetOpacity = 0.85;
+            }
+        }
+
+        if (!nearest) {
+            groundHotspotEntry.hotspot = null;
+            groundHotspotEntry.ring.userData.hotspot = null;
+            groundHotspotEntry.arrow.userData.hotspot = null;
+        }
+
+        groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, targetOpacity, 0.12);
+        groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
+        groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
+    }
+
     function updateFloorHotspot(mouseX, mouseY, sphereLat) {
+        hideFloorHotspot();
+        return;
+
         if (!floorHotspot || !window.tourState.mouseSpherePoint || window.tourState.isTransitioning) {
             return;
         }
@@ -401,17 +608,54 @@
 
     function onValidClick(event) {
         var infoHit = infoHitFromScreen(event);
+        var meshHit = groundHotspotFromEvent(event);
+
+        if (meshHit && window.triggerGSVTransition) {
+            window.triggerGSVTransition(meshHit.target, bearingForHotspot(meshHit));
+            return;
+        }
+
         if (infoHit && window.showInfoCard) {
             window.showInfoCard(infoHit.hotspot, event.clientX, event.clientY);
         }
     }
 
     function onDoubleClick(event) {
-        if (window.tourState.activeFloorHotspot && window.startTransition) {
-            window.startTransition(window.tourState.activeFloorHotspot.target, {
-                hotspot: window.tourState.activeFloorHotspot
-            });
+        var meshHit = groundHotspotFromEvent(event);
+
+        if (meshHit && window.triggerGSVTransition) {
+            window.triggerGSVTransition(meshHit.target, bearingForHotspot(meshHit));
         }
+    }
+
+    function groundHotspotFromEvent(event) {
+        var intersects;
+
+        if (!event || !window.tourState.camera || window.tourState.isTransitioning || allGroundHotspotMeshes.length === 0) {
+            return null;
+        }
+
+        mouseNDC.set(
+            (event.clientX / window.innerWidth) * 2 - 1,
+            -(event.clientY / window.innerHeight) * 2 + 1
+        );
+        groundRaycaster.setFromCamera(mouseNDC, window.tourState.camera);
+        intersects = groundRaycaster.intersectObjects(allGroundHotspotMeshes, false);
+
+        if (intersects.length > 0 && window.tourState.mouseDelta < 5) {
+            return intersects[0].object.userData.hotspot || null;
+        }
+
+        if (
+            groundHotspotEntry &&
+            groundHotspotEntry.hotspot &&
+            groundHotspotEntry.opacity > 0.2 &&
+            window.tourState.mouseDelta < 5
+        ) {
+            return groundHotspotEntry.hotspot;
+        }
+
+        return null;
     }
 
     function rayDistanceToPoint(ray, point) {
@@ -457,8 +701,8 @@
             return;
         }
 
-        if (hotspot.type === 'transition' && window.startTransition) {
-            window.startTransition(hotspot.target, { hotspot: hotspot });
+        if (hotspot.type === 'transition' && window.triggerGSVTransition) {
+            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
         } else if (hotspot.type === 'info' && window.showVRInfoPanel) {
             window.showVRInfoPanel(hotspot);
         } else if (hotspot.type === 'exit' && window.exitVR) {
@@ -510,7 +754,7 @@
         if (hotspot.type === 'transition' && Date.now() - window.tourState.gazeStartTime > 2000) {
             progress.classList.remove('active');
             window.tourState.gazeTarget = null;
-            window.startTransition(hotspot.target, { hotspot: hotspot });
+            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
         } else if (hotspot.type === 'info' && Date.now() - window.tourState.gazeStartTime > 1500) {
             progress.classList.remove('active');
             window.tourState.gazeTarget = null;
@@ -544,4 +788,8 @@
     window.handleXRSelect = handleXRSelect;
     window.updateXRGaze = updateXRGaze;
     window.findHotspotFromRay = findHotspotFromRay;
+    window.rebuildHotspots = initHotspots;
+    window.getGroundHotspotMeshes = function () {
+        return allGroundHotspotMeshes.slice();
+    };
 })();
