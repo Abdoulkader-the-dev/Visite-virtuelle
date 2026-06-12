@@ -51,9 +51,9 @@
     var mouseNDC = new THREE.Vector2(0, 0);
     var GROUND_RADIUS = 3.5;
     var GROUND_Y = -2;
-    var GROUND_HOTSPOT_INNER_RADIUS = 0.24;
-    var GROUND_HOTSPOT_OUTER_RADIUS = 0.72;
-    var GROUND_HOTSPOT_ARROW_SCALE = 0.68;
+    var GROUND_HOTSPOT_INNER_RADIUS = 0.12; // [CORRECTION GSV] réduit de 50%
+    var GROUND_HOTSPOT_OUTER_RADIUS = 0.36; // [CORRECTION GSV] réduit de 50%
+    var GROUND_HOTSPOT_ARROW_SCALE  = 0.38; // [CORRECTION GSV] réduit de ~44%
     var MIN_FOLLOW_RADIUS = 1.2;
     var MAX_FOLLOW_RADIUS = 8;
     var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
@@ -258,7 +258,7 @@
         dirArrows = document.getElementById('dir-arrows');
         infoLayer = document.getElementById('info-hotspot-layer');
         if (floorHotspot) {
-            floorHotspot.style.display = 'none';
+            floorHotspot.style.display = 'flex'; // [CORRECTION GSV] 'none' → 'flex' : le CSS définit display:flex, contrôler uniquement l'opacity
         }
         infoLayer.innerHTML = '';
         infoElements = [];
@@ -531,9 +531,7 @@
     }
 
     function updateFloorHotspot(mouseX, mouseY, sphereLat) {
-        hideFloorHotspot();
-        return;
-
+        // [CORRECTION GSV] suppression de hideFloorHotspot(); return; qui court-circuitaient la fonction
         if (!floorHotspot || !window.tourState.mouseSpherePoint || window.tourState.isTransitioning) {
             return;
         }

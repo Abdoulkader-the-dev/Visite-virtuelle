@@ -54,6 +54,7 @@
                         texture.magFilter = THREE.LinearFilter;
                         // encoding doit correspondre à renderer.outputEncoding = sRGBEncoding
                         texture.encoding = THREE.sRGBEncoding;
+                        texture.needsUpdate = true; // [CORRECTION GSV] force le upload GPU
                         textureCache[path] = texture;
                         textureCache[candidate] = texture;
                         resolve(texture);
@@ -131,7 +132,7 @@
     function createSphere() {
         var geo = new THREE.SphereGeometry(500, 60, 40);
         geo.scale(-1, 1, 1);
-        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1 });
+        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1, depthWrite: true }); // [CORRECTION GSV] depthWrite explicite pour éviter z-fight
         return new THREE.Mesh(geo, mat);
     }
 

@@ -2,7 +2,7 @@
     'use strict';
 
     window.tourState = {
-        currentScene: '1',
+        currentScene: '12', // [CORRECTION GSV] '1' → '12' : la scène '1' n'existe pas dans config.js, causant un écran noir au démarrage
         lon: 0,
         lat: 0,
         fov: 75,

@@ -166,7 +166,7 @@
             var sphere1 = window.tourState.sphere;
             var sphere2 = window.tourState.sphere2;
             var camera = window.tourState.camera;
-            
+
             sphere2.material.map = targetTexture;
             sphere2.material.needsUpdate = true;
             sphere2.material.opacity = 0;
@@ -185,10 +185,10 @@
                 var t = Math.min(1, (now - start) / duration);
                 var easeInOut = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
                 var easeIn = t * t * t; // Cubic ease in for strong translation effect
-                
+
                 // Crossfade
                 sphere2.material.opacity = easeInOut;
-                
+
                 // Camera translation (move up to 350 units forward out of 500 radius)
                 // This causes the natural radial stretch effect at the edges
                 var distance = easeIn * 350;
@@ -256,38 +256,39 @@
         }
     }
 
+    // [CORRECTION GSV] Shader radial stretch — smoothstep(0.25, 1.4) : centre immobile, périphérie étirée
     function createRadialStretchMaterial(texture) {
         return new THREE.ShaderMaterial({
             uniforms: {
                 uMap: { value: texture },
-                uOpacity: { value: 1 },
-                uStretch: { value: 0 }
+                uOpacity: { value: 1.0 },
+                uStretch: { value: 0.0 }
             },
             vertexShader: [
                 'varying vec2 vUv;',
                 'uniform float uStretch;',
-                '',
                 'void main() {',
                 '    vUv = uv;',
-                '    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
-                '    vec4 projected = projectionMatrix * mvPosition;',
-                '    vec2 ndc = projected.xy / projected.w;',
-                '    float radius = length(ndc);',
-                '    float edge = smoothstep(0.10, 1.15, radius);',
-                '    vec2 direction = radius > 0.0001 ? ndc / radius : vec2(0.0);',
-                '',
-                '    projected.xy += direction * edge * edge * uStretch * projected.w;',
-                '    gl_Position = projected;',
+                '    vec4 mvPosition  = modelViewMatrix * vec4(position, 1.0);',
+                '    vec4 projected   = projectionMatrix * mvPosition;',
+                '    vec2 ndc         = projected.xy / projected.w;',
+                '    float radius     = length(ndc);',
+                '    float edge       = smoothstep(0.25, 1.4, radius);',
+                '    float stretch    = edge * edge * uStretch;',
+                '    vec2  dir        = (radius > 0.0001)',
+                '                      ? (ndc / radius)',
+                '                      : vec2(0.0);',
+                '    projected.xy    += dir * stretch * projected.w;',
+                '    gl_Position      = projected;',
                 '}'
             ].join('\n'),
             fragmentShader: [
                 'uniform sampler2D uMap;',
-                'uniform float uOpacity;',
-                'varying vec2 vUv;',
-                '',
+                'uniform float     uOpacity;',
+                'varying vec2      vUv;',
                 'void main() {',
-                '    vec4 color = texture2D(uMap, vUv);',
-                '    gl_FragColor = vec4(color.rgb, color.a * uOpacity);',
+                '    vec4 color     = texture2D(uMap, vUv);',
+                '    gl_FragColor   = vec4(color.rgb, color.a * uOpacity);',
                 '}'
             ].join('\n'),
             side: THREE.DoubleSide,
@@ -296,151 +297,167 @@
         });
     }
 
+    // [CORRECTION GSV] Transition orchestrée par GSAP — dolly + stretch + crossfade
     function triggerGSVTransition(targetSceneId, bearing, options) {
-        var sourceSceneId = window.tourState.currentScene;
+
+        // ── Gardes ────────────────────────────────────────────────
+        if (window.tourState.isTransitioning) { return; }
+        if (targetSceneId === window.tourState.currentScene) { return; }
         var sceneConfig = window.TOUR_CONFIG.scenes[targetSceneId];
+        if (!sceneConfig) { return; }
+
+        // ── Constantes de timing ──────────────────────────────────
+        var TOTAL_DURATION = 0.9;   // [CORRECTION GSV] secondes (GSAP travaille en secondes)
+        var DOLLY_DISTANCE = 80.0;  // [CORRECTION GSV] unités Three.js (16% du rayon 500)
+        var MAX_STRETCH = 0.38;
+
+        // ── État ──────────────────────────────────────────────────
         var camera = window.tourState.camera;
         var scene = window.tourState.scene;
         var oldSphere = window.tourState.sphere;
-        var oldMaterial;
-        var stretchMaterial;
-        var nextSphere;
-        var nextTexturePromise;
-        var startPosition;
-        var dollyTarget;
-        var bearingRad;
-        var startTime;
-        var TOTAL_DURATION = 1400;
-        var STRETCH_DURATION = 500;
-        var DOLLY_DISTANCE = 2.5;
-        var MAX_RADIAL_STRETCH = 0.38;
-        var transitionBearing = typeof bearing === 'number' ? bearing : window.tourState.lon;
-
-        if (window.tourState.isTransitioning || targetSceneId === window.tourState.currentScene) {
-            return;
-        }
-        if (!sceneConfig) {
-            return;
-        }
+        var transitionBearing = (typeof bearing === 'number')
+            ? bearing
+            : window.tourState.lon;
 
         pushHistory(options);
         window.tourState.isTransitioning = true;
         window.tourState.controlsEnabled = false;
+        if (window.hideInfoCard) { window.hideInfoCard(); }
+        if (window.hideFloorHotspot) { window.hideFloorHotspot(); }
 
-        if (window.hideInfoCard) {
-            window.hideInfoCard();
-        }
-        if (window.hideFloorHotspot) {
-            window.hideFloorHotspot();
-        }
-
-        bearingRad = transitionBearing * Math.PI / 180;
-        startPosition = camera.position.clone();
-        dollyTarget = new THREE.Vector3(
-            camera.position.x + Math.sin(bearingRad) * DOLLY_DISTANCE,
-            0,
-            camera.position.z + (-Math.cos(bearingRad)) * DOLLY_DISTANCE
+        // ── Direction du dolly (bearing → vecteur XZ unitaire) ───
+        var bearingRad = transitionBearing * Math.PI / 180;
+        var dollyDir = new THREE.Vector3(
+            Math.sin(bearingRad), 0, -Math.cos(bearingRad)
+        ).normalize();
+        var startPos = camera.position.clone();
+        var endPos = new THREE.Vector3(
+            startPos.x + dollyDir.x * DOLLY_DISTANCE,
+            startPos.y,
+            startPos.z + dollyDir.z * DOLLY_DISTANCE
         );
 
-        nextTexturePromise = loadTextureAsync(sceneConfig.image);
-        nextSphere = window.createSphere ? window.createSphere() : new THREE.Mesh(
-            new THREE.SphereGeometry(500, 60, 40),
-            new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 })
-        );
-        if (!window.createSphere) {
-            nextSphere.geometry.scale(-1, 1, 1);
-        }
+        // ── Sphère de destination ─────────────────────────────────
+        var nextSphere = window.createSphere();
         nextSphere.material.opacity = 0;
         nextSphere.material.transparent = true;
         nextSphere.material.depthWrite = false;
         nextSphere.renderOrder = 2;
         scene.add(nextSphere);
 
-        nextTexturePromise.then(function (texture) {
-            nextSphere.material.map = texture;
+        // ── Shader sur la vieille sphère ──────────────────────────
+        var stretchMat = null;
+        if (oldSphere && oldSphere.material && oldSphere.material.map) {
+            var oldBaseMat = oldSphere.material;
+            stretchMat = createRadialStretchMaterial(oldBaseMat.map);
+            oldSphere.material = stretchMat;
+            oldSphere.renderOrder = 1;
+            oldBaseMat.dispose();
+        }
+
+        // ── Chargement de la texture cible ────────────────────────
+        var textureReady = false;
+        loadTextureAsync(sceneConfig.image).then(function (tex) {
+            nextSphere.material.map = tex;
             nextSphere.material.needsUpdate = true;
-            window.tourState.currentTexture = texture;
-        }).catch(function (error) {
-            console.error(error);
+            window.tourState.currentTexture = tex;
+            textureReady = true;
+        }).catch(function (err) {
+            console.error('[GSV] Texture load failed:', err);
         });
 
-        if (oldSphere && oldSphere.material && oldSphere.material.map) {
-            oldMaterial = oldSphere.material;
-            stretchMaterial = createRadialStretchMaterial(oldMaterial.map);
-            oldSphere.material = stretchMaterial;
-            oldSphere.renderOrder = 1;
-            oldMaterial.dispose();
-        } else if (oldSphere && oldSphere.material) {
-            oldSphere.material.transparent = true;
-            oldSphere.material.depthWrite = false;
+        // ── Timeline GSAP ─────────────────────────────────────────
+        //
+        //  0.0s ──────── 0.45s : stretch monte (0 → MAX_STRETCH)
+        //  0.0s ──────── 0.45s : opacité vieille sphère (1 → 0)
+        //  0.0s ──────── 0.9s  : dolly-in caméra (startPos → endPos)
+        //  0.36s ─────── 0.72s : opacité nouvelle sphère (0 → 1)
+        //  0.9s          ───── : finalize()
+        //
+        var tl = gsap.timeline({
+            onComplete: function () {
+                // Attendre la texture si elle n'est pas encore prête
+                (function waitTexture() {
+                    if (textureReady) {
+                        finalize(nextSphere, oldSphere, targetSceneId, transitionBearing);
+                    } else {
+                        setTimeout(waitTexture, 32);
+                    }
+                })();
+            }
+        });
+
+        // Dolly-in caméra (toute la durée, easeInOut)
+        tl.to(camera.position, {
+            x: endPos.x,
+            y: endPos.y,
+            z: endPos.z,
+            duration: TOTAL_DURATION,
+            ease: 'power2.inOut'
+        }, 0);
+
+        // Stretch radial de la vieille sphère (première moitié)
+        if (stretchMat) {
+            tl.to(stretchMat.uniforms.uStretch, {
+                value: MAX_STRETCH,
+                duration: TOTAL_DURATION * 0.5,
+                ease: 'power2.inOut'
+            }, 0);
+            // Fondu sortant de la vieille sphère (première moitié)
+            tl.to(stretchMat.uniforms.uOpacity, {
+                value: 0,
+                duration: TOTAL_DURATION * 0.5,
+                ease: 'power1.in'
+            }, 0);
         }
 
-        startTime = performance.now();
+        // Fondu entrant de la nouvelle sphère (deuxième moitié, décalé à 40%)
+        tl.to(nextSphere.material, {
+            opacity: 1,
+            duration: TOTAL_DURATION * 0.4,
+            ease: 'power1.out',
+            onUpdate: function () {
+                nextSphere.material.needsUpdate = true;
+            }
+        }, TOTAL_DURATION * 0.4);
 
-        function finalize() {
-            nextTexturePromise.then(function () {
-                if (oldSphere) {
-                    oldSphere.scale.set(1, 1, 1);
-                    scene.remove(oldSphere);
-                    disposeSphere(oldSphere);
-                }
+        // [CORRECTION GSV] finalize définie inline pour closure sur les variables GSAP
+        function finalize(next, old, targetId, finalBearing) {
+            // Nettoyer la vieille sphère
+            if (old) {
+                scene.remove(old);
+                if (old.geometry) { old.geometry.dispose(); }
+                if (old.material) { old.material.dispose(); }
+            }
 
-                nextSphere.material.opacity = 1;
-                nextSphere.material.transparent = false;
-                nextSphere.material.depthWrite = true;
-                window.tourState.sphere = nextSphere;
+            // Finaliser la nouvelle sphère
+            next.material.opacity = 1;
+            next.material.transparent = false;
+            next.material.depthWrite = true;
+            next.material.needsUpdate = true;
+            window.tourState.sphere = next;
 
-                camera.position.set(0, 0, 0.001);
-                window.tourState.currentScene = targetSceneId;
-                window.tourState.lon = normalizeDegrees(transitionBearing + 180);
-                window.tourState.lat = 0;
-                window.tourState.fov = 75;
-                camera.fov = window.tourState.fov;
-                camera.updateProjectionMatrix();
+            // Réinitialiser la caméra au centre
+            camera.position.set(0, 0, 0.001);
 
-                updateSceneUi();
-                window.tourState.isTransitioning = false;
-                window.tourState.controlsEnabled = true;
-                window.tourState.lastInteractionTime = Date.now();
-            }).catch(function () {
-                window.tourState.isTransitioning = false;
-                window.tourState.controlsEnabled = true;
-            });
+            // Mettre à jour l'état de la scène
+            // [ORIENTATION DYNAMIQUE] La caméra regarde dans la direction du déplacement.
+            // `finalBearing` est le bearing du hotspot cliqué dans la scène source.
+            // On regarde dans cette même direction (pas son inverse) car on avance VERS
+            // la scène cible le long de ce cap.
+            window.tourState.currentScene = targetId;
+            window.tourState.lon = normalizeDegrees(finalBearing);
+            window.tourState.lat = 0;
+            window.tourState.fov = 75;
+            camera.fov = 75;
+            camera.updateProjectionMatrix();
+
+            // Mettre à jour l'UI (menu, minimap, hotspots) — NE PAS SUPPRIMER
+            updateSceneUi();
+            window.tourState.isTransitioning = false;
+            window.tourState.controlsEnabled = true;
+            window.tourState.lastInteractionTime = Date.now();
         }
-
-        function animateTransition() {
-            var elapsed = performance.now() - startTime;
-            var rawProgress = Math.min(elapsed / TOTAL_DURATION, 1);
-            var dollyEase = easeInOut(Math.min(rawProgress / 0.7, 1));
-            var fadeEase = easeIn(Math.min(rawProgress / 0.7, 1));
-            var stretchProgress = Math.min(elapsed / STRETCH_DURATION, 1);
-            var stretchEase = easeInOut(stretchProgress);
-            var crossfadeProgress;
-            var crossfadeEase;
-
-            camera.position.lerpVectors(startPosition, dollyTarget, dollyEase);
-
-            if (stretchMaterial) {
-                stretchMaterial.uniforms.uStretch.value = MAX_RADIAL_STRETCH * stretchEase;
-                stretchMaterial.uniforms.uOpacity.value = 1 - fadeEase;
-            } else if (oldSphere && oldSphere.material) {
-                oldSphere.material.opacity = 1 - fadeEase;
-            }
-
-            if (rawProgress > 0.4) {
-                crossfadeProgress = (rawProgress - 0.4) / 0.4;
-                crossfadeEase = easeOut(Math.min(crossfadeProgress, 1));
-                nextSphere.material.opacity = crossfadeEase;
-            }
-
-            if (rawProgress < 1) {
-                requestAnimationFrame(animateTransition);
-            } else {
-                finalize();
-            }
-        }
-
-        requestAnimationFrame(animateTransition);
     }
 
     function startTransition(targetSceneId, options) {

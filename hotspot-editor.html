@@ -50,6 +50,46 @@
         #copy-btn:hover { background: #2563EB; }
         #copy-btn.copied { background: #16a34a; }
 
+        .field-row {
+            display: flex; gap: 10px; margin-bottom: 10px;
+        }
+        .field-row .field { flex: 1; }
+        .field-row .field label {
+            display: block; font-size: 11px; color: #888;
+            text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+        }
+        .field-row .field input, .field-row .field select {
+            width: 100%; padding: 8px 10px; background: #1a1a1a;
+            border: 1px solid #2a2a2a; border-radius: 6px;
+            color: #fff; font-size: 13px; outline: none;
+        }
+        .field-row .field input:focus, .field-row .field select:focus { border-color: #3B82F6; }
+
+        .bearing-display {
+            background: #0d1117; border: 1px solid #2a2a2a; border-radius: 8px;
+            padding: 10px 14px; display: flex; align-items: center; gap: 12px;
+        }
+        .bearing-display .compass {
+            width: 36px; height: 36px; border-radius: 50%;
+            border: 2px solid #3B82F6; position: relative; flex-shrink: 0;
+        }
+        .bearing-display .compass::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            width: 2px; height: 14px; background: #ef4444;
+            transform-origin: bottom center;
+            transform: translateX(-50%) translateY(-100%) rotate(var(--bearing-rotation, 0deg));
+            border-radius: 1px;
+        }
+        .bearing-display .compass .n-label {
+            position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+            font-size: 8px; color: #666; font-weight: 700;
+        }
+        .bearing-display .bearing-info { flex: 1; }
+        .bearing-display .bearing-val { font-size: 20px; font-weight: 700; color: #3B82F6; font-family: 'Courier New', monospace; }
+        .bearing-display .bearing-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+        .hint-text { font-size: 11px; color: #555; margin-top: 6px; line-height: 1.4; }
+
         #log {
             flex: 1; overflow-y: auto; padding: 14px 20px;
         }
@@ -109,7 +149,7 @@
 <div id="panel">
     <div id="panel-header">
         <h1>🎯 Éditeur de hotspots</h1>
-        <p>Naviguez dans la scène · Cliquez pour positionner un hotspot · Copiez les coordonnées dans config.js</p>
+        <p>Naviguez · Positionnez un hotspot · Définissez le bearing et la cible · Copiez dans config.js</p>
     </div>
 
     <div class="section">
@@ -124,7 +164,64 @@
             <div class="coord-row"><span class="coord-label">y</span><span class="coord-val" id="cy">—</span></div>
             <div class="coord-row"><span class="coord-label">z</span><span class="coord-val" id="cz">—</span></div>
         </div>
-        <button id="copy-btn">Copier position: { x, y, z }</button>
+    </div>
+
+    <div class="section">
+        <label>Orientation caméra (bearing calculé)</label>
+        <div class="bearing-display">
+            <div class="compass"><span class="n-label">N</span></div>
+            <div class="bearing-info">
+                <div class="bearing-val" id="cam-bearing">—°</div>
+                <div class="bearing-label">Direction actuelle → <span id="cardinal">—</span></div>
+            </div>
+        </div>
+        <p class="hint-text">Tournez la caméra (clic-glisser) pour voir le bearing en temps réel. C'est la direction dans laquelle vous regardez.</p>
+    </div>
+
+    <div class="section">
+        <label>Propriétés du hotspot</label>
+        <div class="field-row">
+            <div class="field">
+                <label>Type</label>
+                <select id="hs-type">
+                    <option value="transition">transition</option>
+                    <option value="info">info</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Scène cible</label>
+                <select id="hs-target">
+                    <option value="">—</option>
+                </select>
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field">
+                <label>Bearing (direction de transition)</label>
+                <input type="number" id="hs-bearing" min="0" max="359" step="1" placeholder="ex: 45">
+            </div>
+            <div class="field">
+                <label>Label</label>
+                <input type="text" id="hs-label" placeholder="ex: Salle B">
+            </div>
+        </div>
+        <p class="hint-text">
+            <strong>Bearing</strong> = direction vers laquelle la caméra avance et regarde après la transition (0–359°).<br>
+            Indépendant de la position — ajustez-le pour que le dolly-in pointe dans la bonne direction.<br>
+            Astuce : regardez dans la direction souhaitée, puis cliquez « Utiliser la direction actuelle ».
+        </p>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+            <button id="use-cam-bearing" style="flex:1;padding:8px;background:#1e293b;border:1px solid #2a2a2a;border-radius:6px;color:#94a3b8;font-size:12px;cursor:pointer;">
+                🧭 Utiliser la direction actuelle
+            </button>
+            <button id="calc-bearing-pos" style="flex:1;padding:8px;background:#1e293b;border:1px solid #2a2a2a;border-radius:6px;color:#94a3b8;font-size:12px;cursor:pointer;">
+                📐 Calculer depuis position
+            </button>
+        </div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+        <button id="copy-btn">Copier hotspot complet</button>
     </div>
 
     <div id="log">
@@ -156,6 +253,49 @@
     var logList = document.getElementById('log-list');
     var sceneSelect = document.getElementById('scene-select');
 
+    // ── Bearing / hotspot UI ──────────────────────────────────────────────────
+    var camBearingEl   = document.getElementById('cam-bearing');
+    var cardinalEl     = document.getElementById('cardinal');
+    var compassEl      = document.querySelector('.compass');
+    var hsType         = document.getElementById('hs-type');
+    var hsTarget       = document.getElementById('hs-target');
+    var hsBearing      = document.getElementById('hs-bearing');
+    var hsLabel        = document.getElementById('hs-label');
+    var useCamBearingBtn = document.getElementById('use-cam-bearing');
+    var calcBearingBtn   = document.getElementById('calc-bearing-pos');
+
+    // ── Utility: normalize degrees ────────────────────────────────────────────
+    function normalizeDeg(d) { return ((d % 360) + 360) % 360; }
+
+    // ── Utility: bearing from position (same formula as transition.js) ────────
+    function bearingFromPosition(x, z) {
+        var b = Math.atan2(x, -z) * 180 / Math.PI;
+        return normalizeDeg(b);
+    }
+
+    // ── Utility: cardinal direction from degrees ──────────────────────────────
+    function cardinalFromDeg(d) {
+        var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+        return dirs[Math.round(d / 45) % 8];
+    }
+
+    // ── Update compass + bearing display from current lon ─────────────────────
+    function updateCompass() {
+        var normalized = normalizeDeg(lon);
+        camBearingEl.textContent = normalized.toFixed(1) + '°';
+        cardinalEl.textContent = cardinalFromDeg(normalized);
+        compassEl.style.setProperty('--bearing-rotation', normalized + 'deg');
+    }
+
+    // ── Populate scene target dropdown ────────────────────────────────────────
+    var scenes = window.TOUR_CONFIG.scenes;
+    Object.keys(scenes).sort(function(a,b){ return +a - +b; }).forEach(function(id) {
+        var opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = id + ' — ' + scenes[id].name;
+        hsTarget.appendChild(opt);
+    });
+
     // ── Init Three.js ──────────────────────────────────────────────────────────
     var scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
@@ -175,7 +315,6 @@
     textureLoader = new THREE.TextureLoader();
 
     // ── Populate scene selector ────────────────────────────────────────────────
-    var scenes = window.TOUR_CONFIG.scenes;
     Object.keys(scenes).sort(function(a,b){ return +a - +b; }).forEach(function(id) {
         var opt = document.createElement('option');
         opt.value = id;
@@ -186,7 +325,6 @@
     function loadScene(id) {
         currentScene = id;
         var img = scenes[id].image;
-        // Try .JPG then .jpg
         var candidates = [img, img.replace(/\.jpg$/i, '.JPG'), img.replace(/\.JPG$/i, '.jpg')];
         var idx = 0;
         function tryNext() {
@@ -200,6 +338,7 @@
         }
         tryNext();
         lon = 0; lat = 0;
+        updateCompass();
     }
     loadScene(Object.keys(scenes).sort(function(a,b){return+a-+b;})[0]);
     sceneSelect.addEventListener('change', function() { loadScene(this.value); });
@@ -224,11 +363,60 @@
         lon -= (e.clientX - lastX) * 0.25;
         lat  = Math.max(-85, Math.min(85, lat + (e.clientY - lastY) * 0.25));
         lastX = e.clientX; lastY = e.clientY;
+        updateCompass();
     });
     canvas.addEventListener('wheel', function(e) {
         fov = Math.max(40, Math.min(100, fov + e.deltaY * 0.05));
         camera.fov = fov; camera.updateProjectionMatrix();
     });
+
+    // ── Bearing helper buttons ───────────────────────────────────────────────
+    useCamBearingBtn.addEventListener('click', function() {
+        var normalized = normalizeDeg(lon);
+        hsBearing.value = Math.round(normalized);
+        // Flash feedback
+        useCamBearingBtn.style.borderColor = '#3B82F6';
+        useCamBearingBtn.textContent = '✓ ' + Math.round(normalized) + '° enregistré';
+        setTimeout(function() {
+            useCamBearingBtn.style.borderColor = '';
+            useCamBearingBtn.textContent = '🧭 Utiliser la direction actuelle';
+        }, 1200);
+    });
+
+    calcBearingBtn.addEventListener('click', function() {
+        if (!lastCoords) {
+            calcBearingBtn.textContent = '⚠️ Cliquez d\'abord';
+            setTimeout(function() { calcBearingBtn.textContent = '📐 Calculer depuis position'; }, 1500);
+            return;
+        }
+        var b = bearingFromPosition(lastCoords.x, lastCoords.z);
+        hsBearing.value = Math.round(b);
+        calcBearingBtn.style.borderColor = '#22d3ee';
+        calcBearingBtn.textContent = '✓ ' + Math.round(b) + '° depuis position';
+        setTimeout(function() {
+            calcBearingBtn.style.borderColor = '';
+            calcBearingBtn.textContent = '📐 Calculer depuis position';
+        }, 1200);
+    });
+
+    // ── Build code string for copy ───────────────────────────────────────────
+    function buildCode() {
+        if (!lastCoords) return null;
+        var type = hsType.value;
+        var parts = [];
+        parts.push('position: { x: ' + lastCoords.x + ', y: ' + lastCoords.y + ', z: ' + lastCoords.z + ' }');
+        parts.push('type: \'' + type + '\'');
+        if (type === 'transition' && hsTarget.value) {
+            parts.push('target: \'' + hsTarget.value + '\'');
+        }
+        if (hsBearing.value !== '') {
+            parts.push('bearing: ' + Math.round(parseFloat(hsBearing.value) || 0));
+        }
+        if (hsLabel.value) {
+            parts.push('label: \'' + hsLabel.value.replace(/'/g, "\\'") + '\'');
+        }
+        return '{ ' + parts.join(', ') + ' }';
+    }
 
     // ── Click → capture coords ────────────────────────────────────────────────
     canvas.addEventListener('click', function(e) {
@@ -254,7 +442,7 @@
         cxEl.textContent = x;
         cyEl.textContent = y;
         czEl.textContent = z;
-        copyBtn.textContent = 'Copier position: { x, y, z }';
+        copyBtn.textContent = 'Copier hotspot complet';
         copyBtn.classList.remove('copied');
 
         // Red dot on canvas
@@ -262,15 +450,16 @@
         dot.style.top  = e.clientY - rect.top  + 'px';
         dot.style.display = 'block';
 
-        // Log entry
-        var code = 'position: { x: ' + x + ', y: ' + y + ', z: ' + z + ' }';
+        // Log entry with full preview
+        var code = buildCode() || 'position: { x: ' + x + ', y: ' + y + ', z: ' + z + ' }';
         var entry = document.createElement('div');
         entry.className = 'log-entry';
         entry.innerHTML =
             '<div class="scene-tag">Scène ' + currentScene + ' — ' + scenes[currentScene].name + '</div>' +
             '<div class="log-code">' + code + '</div>';
         entry.addEventListener('click', function() {
-            navigator.clipboard.writeText(code).catch(function(){});
+            var latestCode = buildCode() || code;
+            navigator.clipboard.writeText(latestCode).catch(function(){});
             this.style.borderColor = '#22d3ee';
             setTimeout(function(){ entry.style.borderColor = ''; }, 1000);
         });
@@ -280,11 +469,12 @@
     // ── Copy button ───────────────────────────────────────────────────────────
     copyBtn.addEventListener('click', function() {
         if (!lastCoords) return;
-        var code = 'position: { x: ' + lastCoords.x + ', y: ' + lastCoords.y + ', z: ' + lastCoords.z + ' }';
+        var code = buildCode();
+        if (!code) return;
         navigator.clipboard.writeText(code).then(function() {
             copyBtn.textContent = '✓ Copié !';
             copyBtn.classList.add('copied');
-            setTimeout(function(){ copyBtn.textContent = 'Copier position: { x, y, z }'; copyBtn.classList.remove('copied'); }, 2000);
+            setTimeout(function(){ copyBtn.textContent = 'Copier hotspot complet'; copyBtn.classList.remove('copied'); }, 2000);
         });
     });
 
