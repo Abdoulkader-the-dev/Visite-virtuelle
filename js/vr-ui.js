@@ -2,79 +2,17 @@
     'use strict';
 
     // =========================================================================
-    //  VR UI — Boutons 3D HUD pour WebXR
+    //  VR UI — Strict minimum : HUD avec bouton "Quitter VR" uniquement
     // =========================================================================
-    //  Crée des boutons PlaneGeometry avec textures Canvas, attachés à la
-    //  caméra (HUD). Détectés par le raycaster XR via userData.action.
+    //  Aucun menu, aucune grille de scènes, aucun panneau flottant.
+    //  La navigation se fait uniquement via la flèche 3D au sol (hotspots.js).
     // =========================================================================
 
     var vrUiGroup = null;
-    var vrButtons = [];
-    var vrReticle = null;
-    var vrReticleMesh = null;
+    var exitButton = null;
 
     // -------------------------------------------------------------------------
-    //  createButtonTexture() — Génère un canvas avec icône + label
-    // -------------------------------------------------------------------------
-    function createButtonTexture(label, icon, bgColor, textColor) {
-        var canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 128;
-        var ctx = canvas.getContext('2d');
-
-        // Fond arrondi
-        ctx.fillStyle = bgColor || 'rgba(30, 30, 30, 0.85)';
-        ctx.beginPath();
-        ctx.roundRect(4, 4, 248, 120, 16);
-        ctx.fill();
-
-        // Bordure subtile
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(4, 4, 248, 120, 16);
-        ctx.stroke();
-
-        // Icône (gros, centré gauche)
-        ctx.fillStyle = textColor || '#ffffff';
-        ctx.font = 'bold 48px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(icon || '', 70, 64);
-
-        // Label (droite)
-        ctx.font = 'bold 28px system-ui';
-        ctx.textAlign = 'left';
-        ctx.fillText(label || '', 120, 64);
-
-        return new THREE.CanvasTexture(canvas);
-    }
-
-    // -------------------------------------------------------------------------
-    //  createVRButton() — Crée un mesh bouton 3D avec texture Canvas
-    // -------------------------------------------------------------------------
-    function createVRButton(label, icon, bgColor, action, userData) {
-        var texture = createButtonTexture(label, icon, bgColor, '#ffffff');
-        var material = new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        var mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.25), material);
-        mesh.userData = Object.assign({ action: action, isVRButton: true }, userData || {});
-        mesh.renderOrder = 10;
-        return mesh;
-    }
-
-    // -------------------------------------------------------------------------
-    //  buildVRUI() — Construit le groupe HUD dans la scène mondiale
-    // -------------------------------------------------------------------------
-    //  Le HUD est ajouté à la scène (scene.add), PAS à la caméra.
-    //  C'est updateVRUI() qui repositionne le groupe chaque frame devant
-    //  l'utilisateur, en copiant position + rotation Y (yaw) de la caméra.
-    //  Cela évite le bug de matrice WebXR où camera.add() fausse le
-    //  raycasting des contrôleurs.
+    //  buildVRUI() — Crée le HUD dans la scène mondiale (pas sur la caméra)
     // -------------------------------------------------------------------------
     function buildVRUI() {
         if (vrUiGroup) { return; }
@@ -82,57 +20,48 @@
         vrUiGroup = new THREE.Group();
         vrUiGroup.name = 'vr-ui-hud';
 
-        // ── Bouton Retour ────────────────────────────────────────────
-        var backBtn = createVRButton('Retour', '←', 'rgba(60,60,60,0.85)', 'goBack');
-        backBtn.position.set(-0.35, -0.5, -1.5);
-        vrUiGroup.add(backBtn);
-        vrButtons.push(backBtn);
+        // ── Bouton Quitter VR (petit, discret, en bas du champ de vision) ──
+        var canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 64;
+        var ctx = canvas.getContext('2d');
 
-        // ── Bouton Menu Scènes ───────────────────────────────────────
-        var menuBtn = createVRButton('Scènes', '☰', 'rgba(60,60,60,0.85)', 'toggleMenu');
-        menuBtn.position.set(0.35, -0.5, -1.5);
-        vrUiGroup.add(menuBtn);
-        vrButtons.push(menuBtn);
+        ctx.fillStyle = 'rgba(30, 30, 30, 0.75)';
+        ctx.beginPath();
+        ctx.roundRect(8, 8, 240, 48, 12);
+        ctx.fill();
 
-        // ── Bouton Quitter VR ────────────────────────────────────────
-        var exitBtn = createVRButton('Quitter', '✕', 'rgba(120,30,30,0.85)', 'exitVR');
-        exitBtn.position.set(0, -0.8, -1.5);
-        vrUiGroup.add(exitBtn);
-        vrButtons.push(exitBtn);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(8, 8, 240, 48, 12);
+        ctx.stroke();
 
-        // ── Reticule central (point de visée) ────────────────────────
-        var reticleCanvas = document.createElement('canvas');
-        reticleCanvas.width = 64;
-        reticleCanvas.height = 64;
-        var rCtx = reticleCanvas.getContext('2d');
-        rCtx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-        rCtx.lineWidth = 2;
-        rCtx.beginPath();
-        rCtx.arc(32, 32, 20, 0, Math.PI * 2);
-        rCtx.stroke();
-        rCtx.beginPath();
-        rCtx.arc(32, 32, 4, 0, Math.PI * 2);
-        rCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        rCtx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Quitter VR', 128, 32);
 
-        var reticleTexture = new THREE.CanvasTexture(reticleCanvas);
-        var reticleMat = new THREE.MeshBasicMaterial({
-            map: reticleTexture,
+        var texture = new THREE.CanvasTexture(canvas);
+        var material = new THREE.MeshBasicMaterial({
+            map: texture,
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: false
         });
-        vrReticleMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.06), reticleMat);
-        vrReticleMesh.position.set(0, 0, -1.5);
-        vrReticleMesh.renderOrder = 11;
-        vrUiGroup.add(vrReticleMesh);
 
-        // Ajouter le HUD à la scène mondiale (pas à la caméra)
+        exitButton = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), material);
+        exitButton.position.set(0, -0.6, -1.5);
+        exitButton.userData = { action: 'exitVR', isVRButton: true };
+        exitButton.renderOrder = 10;
+        vrUiGroup.add(exitButton);
+
         window.tourState.scene.add(vrUiGroup);
     }
 
     // -------------------------------------------------------------------------
-    //  showVRUI() / hideVRUI() — Active/désactive le HUD
+    //  showVRUI() / hideVRUI()
     // -------------------------------------------------------------------------
     function showVRUI() {
         if (!vrUiGroup) { buildVRUI(); }
@@ -144,8 +73,8 @@
     }
 
     // -------------------------------------------------------------------------
-    //  handleXRSelect() — Appelé lors d'un trigger/squeeze sur un contrôleur
-    //  Intersecte le rayon XR avec les boutons VR et les hotspots 3D.
+    //  handleXRSelect() — Trigger/squeeze sur un contrôleur
+    //  Teste uniquement le bouton Quitter VR.
     // -------------------------------------------------------------------------
     function handleXRSelect(event) {
         var controller = event.target;
@@ -156,201 +85,62 @@
         raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
         raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-        // ── 1. Tester les boutons VR HUD ─────────────────────────────
-        if (vrUiGroup && vrUiGroup.visible) {
-            var buttonHits = raycaster.intersectObjects(vrButtons, false);
-            if (buttonHits.length > 0 && buttonHits[0].distance < 3.0) {
-                var hit = buttonHits[0].object;
-                executeVRButtonAction(hit.userData.action, hit.userData);
-                return;
+        if (exitButton) {
+            var hits = raycaster.intersectObject(exitButton, false);
+            if (hits.length > 0 && hits[0].distance < 3.0) {
+                doExitVR();
             }
         }
+    }
 
-        // ── 2. Tester les hotspots 3D au sol ─────────────────────────
-        if (window.tourState.scene) {
-            var allMeshes = [];
-            window.tourState.scene.traverse(function (child) {
-                if (child.isMesh && child.userData && child.userData.hotspot) {
-                    allMeshes.push(child);
-                }
+    // -------------------------------------------------------------------------
+    //  doExitVR() — Ferme proprement la session WebXR
+    // -------------------------------------------------------------------------
+    function doExitVR() {
+        var renderer = window.tourState.renderer;
+        if (!renderer) { return; }
+
+        var session = renderer.xr.getSession();
+        if (session) {
+            session.end().then(function () {
+                window.tourState.isXRActive = false;
+            }).catch(function (err) {
+                console.error('[VR] Erreur fin de session:', err);
+                window.tourState.isXRActive = false;
             });
-            var hotspotHits = raycaster.intersectObjects(allMeshes, false);
-            if (hotspotHits.length > 0) {
-                var hotspot = hotspotHits[0].object.userData.hotspot;
-                if (hotspot && hotspot.type === 'transition' && window.startTransition) {
-                    window.startTransition(hotspot.target, { hotspot: hotspot });
-                } else if (hotspot && hotspot.type === 'info' && window.showInfoCard) {
-                    window.showInfoCard(hotspot, window.innerWidth / 2, window.innerHeight / 2);
-                }
-            }
+        } else {
+            window.tourState.isXRActive = false;
         }
     }
 
     // -------------------------------------------------------------------------
-    //  executeVRButtonAction() — Exécute l'action associée à un bouton
-    // -------------------------------------------------------------------------
-    function executeVRButtonAction(action, data) {
-        switch (action) {
-            case 'goBack':
-                if (window.goBack) { window.goBack(); }
-                break;
-            case 'toggleMenu':
-                toggleVRSceneMenu();
-                break;
-            case 'exitVR':
-                if (window.exitVR) { window.exitVR(); }
-                break;
-            case 'loadScene':
-                if (data && data.sceneId && window.startTransition) {
-                    window.startTransition(data.sceneId);
-                    hideVRSceneMenu();
-                }
-                break;
-            default:
-                break;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    //  Menu Scènes VR — Panneau 3D avec la liste des scènes
-    // -------------------------------------------------------------------------
-    var vrSceneMenuGroup = null;
-
-    function toggleVRSceneMenu() {
-        if (vrSceneMenuGroup && vrSceneMenuGroup.parent) {
-            hideVRSceneMenu();
-            return;
-        }
-        showVRSceneMenu();
-    }
-
-    function showVRSceneMenu() {
-        hideVRSceneMenu();
-
-        vrSceneMenuGroup = new THREE.Group();
-        vrSceneMenuGroup.name = 'vr-scene-menu';
-
-        // Fond du panneau
-        var bgCanvas = document.createElement('canvas');
-        bgCanvas.width = 512;
-        bgCanvas.height = 512;
-        var bgCtx = bgCanvas.getContext('2d');
-        bgCtx.fillStyle = 'rgba(20, 20, 20, 0.92)';
-        bgCtx.beginPath();
-        bgCtx.roundRect(8, 8, 496, 496, 24);
-        bgCtx.fill();
-        bgCtx.strokeStyle = 'rgba(255,255,255,0.15)';
-        bgCtx.lineWidth = 3;
-        bgCtx.beginPath();
-        bgCtx.roundRect(8, 8, 496, 496, 24);
-        bgCtx.stroke();
-
-        var bgTexture = new THREE.CanvasTexture(bgCanvas);
-        var bgMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshBasicMaterial({
-            map: bgTexture, transparent: true, side: THREE.DoubleSide, depthWrite: false
-        }));
-        vrSceneMenuGroup.add(bgMesh);
-
-        // Boutons de scène (grille 3 colonnes)
-        var sceneIds = Object.keys(window.TOUR_CONFIG.scenes);
-        var cols = 3;
-        var btnW = 0.32;
-        var btnH = 0.12;
-        var startX = -0.48;
-        var startY = 0.4;
-        var gapX = 0.04;
-        var gapY = 0.04;
-
-        sceneIds.forEach(function (sceneId, index) {
-            var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
-            var col = index % cols;
-            var row = Math.floor(index / cols);
-
-            var btnCanvas = document.createElement('canvas');
-            btnCanvas.width = 256;
-            btnCanvas.height = 96;
-            var bCtx = btnCanvas.getContext('2d');
-
-            var isActive = sceneId === window.tourState.currentScene;
-            bCtx.fillStyle = isActive ? 'rgba(59, 130, 246, 0.9)' : 'rgba(60, 60, 60, 0.85)';
-            bCtx.beginPath();
-            bCtx.roundRect(4, 4, 248, 88, 12);
-            bCtx.fill();
-            bCtx.strokeStyle = isActive ? 'rgba(120,180,255,0.6)' : 'rgba(255,255,255,0.15)';
-            bCtx.lineWidth = 2;
-            bCtx.beginPath();
-            bCtx.roundRect(4, 4, 248, 88, 12);
-            bCtx.stroke();
-
-            bCtx.fillStyle = '#ffffff';
-            bCtx.font = 'bold 22px system-ui';
-            bCtx.textAlign = 'center';
-            bCtx.textBaseline = 'middle';
-            bCtx.fillText(sceneConfig.name, 128, 48);
-
-            var btnTexture = new THREE.CanvasTexture(btnCanvas);
-            var btnMesh = new THREE.Mesh(new THREE.PlaneGeometry(btnW, btnH), new THREE.MeshBasicMaterial({
-                map: btnTexture, transparent: true, side: THREE.DoubleSide, depthWrite: false
-            }));
-            btnMesh.position.set(startX + col * (btnW + gapX), startY - row * (btnH + gapY), 0.01);
-            btnMesh.userData = { action: 'loadScene', sceneId: sceneId, isVRButton: true };
-            vrSceneMenuGroup.add(btnMesh);
-        });
-
-        // Positionner le panneau devant la caméra
-        var camera = window.tourState.camera;
-        var direction = camera.getWorldDirection(new THREE.Vector3());
-        var pos = camera.getWorldPosition(new THREE.Vector3()).add(direction.multiplyScalar(1.8));
-        vrSceneMenuGroup.position.copy(pos);
-        vrSceneMenuGroup.quaternion.copy(camera.quaternion);
-        vrSceneMenuGroup.renderOrder = 20;
-
-        window.tourState.scene.add(vrSceneMenuGroup);
-    }
-
-    function hideVRSceneMenu() {
-        if (vrSceneMenuGroup && vrSceneMenuGroup.parent) {
-            vrSceneMenuGroup.parent.remove(vrSceneMenuGroup);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    //  updateVRUI() — Repositionne le HUD dans la scène mondiale chaque frame
-    // -------------------------------------------------------------------------
-    //  Copie la position de la caméra sur le groupe HUD, puis applique
-    //  uniquement la rotation Y (yaw) pour que les boutons restent horizontaux
-    //  et face à l'utilisateur, sans suivre le tangage (pitch) de la tête.
-    //  Le HUD est à z = -2 devant la caméra.
+    //  updateVRUI() — Repositionne le HUD devant la caméra chaque frame
+    //  Copie position caméra + yaw seulement (pas de pitch/roll).
     // -------------------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !vrUiGroup.visible) { return; }
 
         var camera = window.tourState.camera;
 
-        // 1. Copier la position exacte de la caméra
         vrUiGroup.position.copy(camera.position);
 
-        // 2. Extraire uniquement le yaw (rotation Y) de la caméra
-        //    pour que le HUD reste horizontal, sans suivre le pitch/roll
         var euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-        euler.x = 0; // annuler le tangage (pitch)
-        euler.z = 0; // annuler le roulis (roll)
+        euler.x = 0;
+        euler.z = 0;
         vrUiGroup.quaternion.setFromEuler(euler);
 
-        // 3. Décaler le HUD à z = -2 devant l'utilisateur
-        var forward = new THREE.Vector3(0, 0, -2);
+        var forward = new THREE.Vector3(0, 0, -1.5);
         forward.applyQuaternion(vrUiGroup.quaternion);
         vrUiGroup.position.add(forward);
     }
 
     // -------------------------------------------------------------------------
-    //  Intégration : brancher handleXRSelect sur les contrôleurs
+    //  initVRUI() — Initialisation + hooks session start/end
     // -------------------------------------------------------------------------
     function initVRUI() {
         buildVRUI();
         hideVRUI();
 
-        // Hook session start/end pour afficher/masquer le HUD
         var renderer = window.tourState.renderer;
         if (renderer) {
             renderer.xr.addEventListener('sessionstart', function () {
@@ -358,7 +148,6 @@
             });
             renderer.xr.addEventListener('sessionend', function () {
                 hideVRUI();
-                hideVRSceneMenu();
             });
         }
     }
@@ -368,6 +157,5 @@
     window.updateVRUI = updateVRUI;
     window.showVRUI = showVRUI;
     window.hideVRUI = hideVRUI;
-    window.showVRSceneMenu = showVRSceneMenu;
-    window.hideVRSceneMenu = hideVRSceneMenu;
+    window.doExitVR = doExitVR;
 })();

@@ -278,9 +278,6 @@
             document.body.classList.remove('xr-active');
             document.getElementById('reticle').classList.remove('active');
             document.getElementById('reticle-progress').classList.remove('active');
-            if (window.hideVRInfoPanel) {
-                window.hideVRInfoPanel();
-            }
         });
     }
 
@@ -296,12 +293,6 @@
         }
         if (window.updateCompass) {
             window.updateCompass();
-        }
-        if (window.updateXRGaze) {
-            window.updateXRGaze();
-        }
-        if (window.updateVRInfoPanelFrame) {
-            window.updateVRInfoPanelFrame();
         }
         if (window.updateVRUI) {
             window.updateVRUI();

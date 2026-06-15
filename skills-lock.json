@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "aframe-webxr": {
+      "source": "freshtechbro/claudedesignskills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/aframe-webxr/SKILL.md",
+      "computedHash": "22f68f3808702b372f68fc45378010e222cd4192056bb17ab2ab024c5751071b"
+    },
+    "webxr-dev": {
+      "source": "danielcanton/webxr-dev-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "b2969e1b8cc2fa139269d0c7d1e8d8f4c125bb994ce0ad789143b59cb65c4124"
+    }
+  }
+}

@@ -247,31 +247,6 @@
             window.tourState.scene.add(groundHotspotGroup);
         }
 
-        // --- Bouton Quitter VR (3D) ---
-        var exitCanvas = document.createElement('canvas');
-        exitCanvas.width = 128;
-        exitCanvas.height = 48;
-        var exitCtx = exitCanvas.getContext('2d');
-        exitCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        exitCtx.roundRect ? exitCtx.roundRect(0, 0, 128, 48, 8) : exitCtx.fillRect(0, 0, 128, 48);
-        exitCtx.fill();
-        exitCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        exitCtx.lineWidth = 2;
-        exitCtx.stroke();
-        exitCtx.fillStyle = 'white';
-        exitCtx.font = 'bold 16px Arial';
-        exitCtx.textAlign = 'center';
-        exitCtx.textBaseline = 'middle';
-        exitCtx.fillText('QUITTER VR', 64, 24);
-
-        var exitTexture = new THREE.CanvasTexture(exitCanvas);
-        var exitMat = new THREE.SpriteMaterial({ map: exitTexture, transparent: true });
-        var exitSprite = new THREE.Sprite(exitMat);
-        exitSprite.scale.set(30, 12, 1);
-        exitSprite.position.set(0, -60, -150);
-        hotspotGroup.add(exitSprite);
-        hotspotMarkers.push({ hotspot: { type: 'exit' }, marker: exitSprite });
-
         // ---- Flèches directionnelles : avancer / reculer par ordre de nom ----
         var fwdBtn = document.getElementById('dir-arrow-fwd');
         var bwdBtn = document.getElementById('dir-arrow-bwd');
@@ -616,122 +591,27 @@
         return null;
     }
 
-    function rayDistanceToPoint(ray, point) {
-        var closest = new THREE.Vector3();
-        ray.closestPointToPoint(point, closest);
-        return closest.distanceTo(point);
-    }
-
-    function findHotspotFromRay(ray, types, threshold) {
-        var best = null;
-        var bestDistance = threshold || 36;
-
-        var searchHotspots = currentHotspots().concat([{
-            type: 'exit',
-            positionVector: new THREE.Vector3(0, -60, -150)
-        }]);
-
-        searchHotspots.forEach(function (hotspot) {
-            if (types.indexOf(hotspot.type) === -1) {
-                return;
-            }
-            var distance = rayDistanceToPoint(ray, hotspot.positionVector);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = hotspot;
-            }
-        });
-
-        return best;
-    }
-
-    function rayFromController(controller) {
+    // -------------------------------------------------------------------------
+    // handleXRSelect() — Gâchette manette : teste uniquement la flèche au sol
+    // -------------------------------------------------------------------------
+    function handleXRSelect(event) {
+        var controller = event.target;
+        var tempMatrix = new THREE.Matrix4();
         tempMatrix.identity().extractRotation(controller.matrixWorld);
-        xrRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        xrRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-        return xrRaycaster.ray;
-    }
 
-    function handleXRSelect(controller) {
-        var hotspot = findHotspotFromRay(rayFromController(controller), ['transition', 'info', 'exit'], 46);
-        if (!hotspot) {
-            return;
-        }
+        var raycaster = new THREE.Raycaster();
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-        if (hotspot.type === 'transition' && window.triggerGSVTransition) {
-            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
-        } else if (hotspot.type === 'info' && window.showVRInfoPanel) {
-            window.showVRInfoPanel(hotspot);
-        } else if (hotspot.type === 'exit' && window.exitVR) {
-            window.exitVR();
-        }
-    }
-
-    function updateXRGaze() {
-        if (!window.tourState.isXRActive || window.tourState.isTransitioning) {
-            return;
-        }
-
-        var ray = new THREE.Ray(
-            window.tourState.camera.getWorldPosition(new THREE.Vector3()),
-            window.tourState.camera.getWorldDirection(new THREE.Vector3())
-        );
-        var hotspot = findHotspotFromRay(ray, ['transition', 'info', 'exit'], 38);
-        var progress = document.getElementById('reticle-progress');
-
-        if (window.tourState.gazeTarget && window.tourState.gazeTarget !== hotspot) {
-            var oldMarker = getMarkerForHotspot(window.tourState.gazeTarget);
-            if (oldMarker) {
-                if (oldMarker.material.color) oldMarker.material.color.set(0xffffff);
-                if (oldMarker.scale.x > 20) oldMarker.scale.set(20, 20, 1);
+        if (allGroundHotspotMeshes.length > 0) {
+            var hits = raycaster.intersectObjects(allGroundHotspotMeshes, false);
+            if (hits.length > 0) {
+                var hotspot = hits[0].object.userData.hotspot;
+                if (hotspot && hotspot.type === 'transition' && window.triggerGSVTransition) {
+                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
+                }
             }
         }
-
-        if (!hotspot) {
-            window.tourState.gazeTarget = null;
-            window.tourState.gazeStartTime = 0;
-            progress.classList.remove('active');
-            return;
-        }
-
-        var marker = getMarkerForHotspot(hotspot);
-        if (marker) {
-            if (marker.material.color) marker.material.color.set(0x3B82F6);
-        }
-
-        if (window.tourState.gazeTarget !== hotspot) {
-            window.tourState.gazeTarget = hotspot;
-            window.tourState.gazeStartTime = Date.now();
-            progress.classList.add('active');
-            return;
-        }
-
-        if (hotspot.type === 'transition' && Date.now() - window.tourState.gazeStartTime > 2000) {
-            progress.classList.remove('active');
-            window.tourState.gazeTarget = null;
-            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
-        } else if (hotspot.type === 'info' && Date.now() - window.tourState.gazeStartTime > 1500) {
-            progress.classList.remove('active');
-            window.tourState.gazeTarget = null;
-            if (window.showVRInfoPanel) {
-                window.showVRInfoPanel(hotspot);
-            }
-        } else if (hotspot.type === 'exit' && Date.now() - window.tourState.gazeStartTime > 1500) {
-            progress.classList.remove('active');
-            window.tourState.gazeTarget = null;
-            if (window.exitVR) {
-                window.exitVR();
-            }
-        }
-    }
-
-    function getMarkerForHotspot(hotspot) {
-        for (var i = 0; i < hotspotMarkers.length; i++) {
-            if (hotspotMarkers[i].hotspot === hotspot) {
-                return hotspotMarkers[i].marker;
-            }
-        }
-        return null;
     }
 
     window.initHotspots = initHotspots;
@@ -739,8 +619,6 @@
     window.onValidClick = onValidClick;
     window.onDoubleClick = onDoubleClick;
     window.handleXRSelect = handleXRSelect;
-    window.updateXRGaze = updateXRGaze;
-    window.findHotspotFromRay = findHotspotFromRay;
     window.rebuildHotspots = initHotspots;
     window.getActiveController = getActiveController;
     window.getGroundHotspotMeshes = function () {
