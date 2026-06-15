@@ -592,7 +592,9 @@
     }
 
     // -------------------------------------------------------------------------
-    // handleXRSelect() — Gâchette manette : teste uniquement la flèche au sol
+    // handleXRSelect() — Gâchette manette : teste d'abord le bouton Quitter VR,
+    // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
+    // "Quitter" soit intercepté par la flèche.
     // -------------------------------------------------------------------------
     function handleXRSelect(event) {
         var controller = event.target;
@@ -603,6 +605,16 @@
         raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
         raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
+        // ── Étape 1 : bouton Quitter VR ──────────────────────────────
+        if (window.vrExitButton && window.vrExitButton.visible) {
+            var exitHits = raycaster.intersectObject(window.vrExitButton, false);
+            if (exitHits.length > 0 && exitHits[0].distance < 3.0) {
+                if (window.doExitVR) { window.doExitVR(); }
+                return;
+            }
+        }
+
+        // ── Étape 2 : flèche au sol (hotspot de navigation) ──────────
         if (allGroundHotspotMeshes.length > 0) {
             var hits = raycaster.intersectObjects(allGroundHotspotMeshes, false);
             if (hits.length > 0) {

@@ -57,6 +57,9 @@
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
 
+        // Exposer le bouton globalement pour handleXRSelect()
+        window.vrExitButton = exitButton;
+
         window.tourState.scene.add(vrUiGroup);
     }
 
