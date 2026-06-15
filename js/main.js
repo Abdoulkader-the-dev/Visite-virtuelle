@@ -167,7 +167,9 @@
             window.tourState.sphere.material.needsUpdate = true;
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
-            window.tourState.lon = typeof options.initialLon === 'number' ? options.initialLon : 0;
+            window.tourState.lon = typeof options.initialLon === 'number'
+                ? options.initialLon
+                : (sceneConfig.defaultLon !== undefined ? sceneConfig.defaultLon : 0);
             window.tourState.lat = typeof options.initialLat === 'number' ? options.initialLat : 0;
             window.tourState.fov = typeof options.initialFov === 'number' ? options.initialFov : 75;
             window.tourState.camera.fov = window.tourState.fov;
@@ -377,6 +379,9 @@
         }
         if (window.initUI) {
             window.initUI();
+        }
+        if (window.initVRUI) {
+            window.initVRUI();
         }
 
         setupXRControllers();

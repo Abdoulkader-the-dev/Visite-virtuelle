@@ -142,12 +142,91 @@ dollyTarget = new THREE.Vector3(
 7. **Finalize resets camera** — `camera.position.set(0, 0, 0.001)` after transition ends
 8. **All existing functions preserved** — no dead code paths accidentally removed
 
+### 6. Dolly Direction Uses Bearing Instead of Actual Hotspot Position
+
+**Symptom:** Camera dolly-in goes in a direction that doesn't match the 3D arrow on the floor.
+
+**Root cause pattern:** `dollyDir` computed from a fixed `bearing` value (from config) instead of the real 3D position of the clicked hotspot.
+
+**Diagnosis steps:**
+1. In `triggerGSVTransition()`, check how `dollyDir` is computed.
+2. If it uses `Math.sin(bearingRad)` / `-Math.cos(bearingRad)` from a config bearing, it ignores the actual hotspot position.
+3. The correct approach: compute direction from camera position to hotspot position:
+   ```js
+   var dx = hotspot.position.x - camera.position.x;
+   var dy = (hotspot.position.y || 0) - camera.position.y;
+   var dz = hotspot.position.z - camera.position.z;
+   var len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+   dollyDir = new THREE.Vector3(dx/len, dy/len, dz/len);
+   ```
+4. The hotspot must be passed via `options.hotspot` from the click handler.
+
+**Fix:** Pass `{ hotspot: meshHit }` from `onDoubleClick`/`onValidClick`/`handleXRSelect` to `triggerGSVTransition`, then use `options.hotspot.position` for direction.
+
+---
+
+### 7. 3D Arrow Points in Wrong Direction (Bearing vs Relative Angle)
+
+**Symptom:** The floor arrow (3D mesh) doesn't point toward the target scene.
+
+**Root cause pattern:** Arrow rotation uses `bearingForHotspot(nearest)` (absolute world bearing) instead of computing the relative angle from the arrow's position to the hotspot's position.
+
+**Diagnosis steps:**
+1. In `updateGroundHotspots()`, check what value feeds `rotation.y` on the arrow mesh.
+2. If it's `bearingForHotspot(nearest)`, the arrow points in world space, not toward the target.
+3. The correct approach:
+   ```js
+   var dx = nearest.positionVector.x - groundPoint.x;
+   var dz = nearest.positionVector.z - groundPoint.z;
+   var angleToTarget = Math.atan2(dz, dx);
+   ```
+
+**Fix:** Replace `bearingForHotspot(nearest)` with `Math.atan2(dz, dx)` computed from the relative position.
+
+---
+
+### 8. Camera Looks Backward After Transition (Missing 180° Inversion)
+
+**Symptom:** After completing a transition, the camera faces the opposite direction from the movement.
+
+**Root cause pattern:** Panoramas are inherently "upside down" in 360° sphere mapping. The `finalize()` function sets `lon = normalizeDegrees(finalBearing)` without compensating.
+
+**Diagnosis steps:**
+1. In `finalize()` inside `triggerGSVTransition()`, find the line setting `window.tourState.lon`.
+2. If it's `normalizeDegrees(finalBearing)`, the camera looks backward.
+3. The correct value: `normalizeDegrees(finalBearing + 180)`.
+
+**Fix:** Add `+ 180` to the final longitude assignment. This compensates for the native inversion of 360° panoramic images.
+
+---
+
+### 9. HTML Overlay Hotspots Should Be Removed
+
+**Symptom:** HTML-based floor hotspots (CSS arrows, labels) interfere with or duplicate the 3D mesh hotspots.
+
+**Root cause pattern:** Legacy HTML/CSS overlay code remains in `hotspots.js` alongside the 3D mesh system.
+
+**Diagnosis steps:**
+1. Search `hotspots.js` for `document.getElementById('floor-hotspot')`, `floorArrowSvg`, `computeArrowAngle`, `updateFloorHotspot`, `hideFloorHotspot`.
+2. If these exist, they are legacy HTML overlay code.
+
+**Fix:** Remove all HTML overlay logic. Keep only:
+- 3D mesh creation (`createGroundHotspot`, `groundHotspotGroup`)
+- Raycaster-based interaction (`groundRaycaster`, `allGroundHotspotMeshes`)
+- Dynamic rotation via `Math.atan2(dz, dx)`
+- Opacity lerp for fade in/out
+
+Remove these functions entirely: `computeArrowAngle`, `updateFloorHotspot`, `hideFloorHotspot`, `screenPointForHotspot`.
+Remove these variables: `floorHotspot`, `floorLabel`, `floorArrowSvg`, `cameraMarker`, `dirArrows`.
+
+---
+
 ## Approved Modules for Bug Fixes
 
 These are the only files that should be modified during bug fixes:
 - `state.js` — 1 line typically
-- `hotspots.js` — early-return removal
-- `transition.js` — constants + shader + dolly target
+- `hotspots.js` — early-return removal, HTML cleanup, 3D arrow rotation fix
+- `transition.js` — constants + shader + dolly direction + 180° inversion
 
 These files must NOT be modified:
 - `config.js` — scene configuration is data, not logic

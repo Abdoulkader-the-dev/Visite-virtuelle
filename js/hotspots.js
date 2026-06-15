@@ -2,47 +2,22 @@
     'use strict';
 
     // =========================================================================
-    // FLOOR NAVIGATION HOTSPOT — Style Google Street View
+    // FLOOR NAVIGATION HOTSPOT — 3D mesh uniquement (plus aucun overlay HTML)
     // =========================================================================
     //
     // Le hotspot de navigation suit la souris sur la partie basse du panorama.
-    // Il affiche une FLÈCHE SVG couchée au sol dont la DIRECTION pointe vers
-    // la scène cible la plus proche.
+    // Il affiche un ANNEAU + une FLÈCHE 3D couchés au sol, dont la DIRECTION
+    // pointe dynamiquement vers le hotspot cible le plus proche.
     //
-    // STRUCTURE HTML (dans index.html) :
-    //   <div id="floor-hotspot">
-    //     <svg id="floor-arrow-svg">...</svg>   ← flèche directionnelle
-    //     <div id="floor-hotspot-label"></div>  ← nom de la scène cible
-    //   </div>
-    //
-    // COMMENT MODIFIER LA FLÈCHE :
-    //   Le style visuel est dans css/style.css, section "Floor hotspot arrow".
-    //   - Couleur de la flèche   → variable --arrow-color dans #floor-hotspot
-    //   - Taille                 → width/height sur #floor-hotspot et #floor-arrow-svg
-    //   - Animation de pulsation → @keyframes arrowPulse
-    //
-    // COMMENT MODIFIER LA LOGIQUE DE DIRECTION :
-    //   La fonction computeArrowAngle() ci-dessous calcule l'angle en degrés
-    //   entre la caméra et le hotspot cible en projetant les deux points sur
-    //   le plan horizontal (XZ) de la sphère panoramique.
-    //   - Pour désactiver la rotation directionnelle : retourner toujours 0
-    //   - Pour inverser la direction : remplacer atan2(dx, dz) par atan2(-dx, -dz)
-    //
-    // DONNÉES HOTSPOT (dans js/config.js) :
+    // DONNÉES HOTSPOT (dans js/config.js — EN LECTURE SEULE) :
     //   {
     //     position: { x: 150, y: 0, z: -250 },  ← point 3D dans la sphère
     //     type: 'transition',
     //     target: '2',                            ← ID de la scène cible
-    //     label: 'Cuisine'                        ← texte affiché sous la flèche
+    //     label: 'Cuisine'                        ← texte affiché
     //   }
-    //   La position Y est ignorée pour le calcul de direction (plan au sol).
     // =========================================================================
 
-    var floorHotspot;
-    var floorLabel;
-    var floorArrowSvg;
-    var cameraMarker;
-    var dirArrows;
     var infoLayer;
     var infoElements = [];
     var xrRaycaster = new THREE.Raycaster();
@@ -51,15 +26,15 @@
     var mouseNDC = new THREE.Vector2(0, 0);
     var GROUND_RADIUS = 3.5;
     var GROUND_Y = -2;
-    var GROUND_HOTSPOT_INNER_RADIUS = 0.12; // [CORRECTION GSV] réduit de 50%
-    var GROUND_HOTSPOT_OUTER_RADIUS = 0.36; // [CORRECTION GSV] réduit de 50%
-    var GROUND_HOTSPOT_ARROW_SCALE  = 0.38; // [CORRECTION GSV] réduit de ~44%
+    var GROUND_HOTSPOT_INNER_RADIUS = 0.12;
+    var GROUND_HOTSPOT_OUTER_RADIUS = 0.36;
+    var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
     var MIN_FOLLOW_RADIUS = 1.2;
     var MAX_FOLLOW_RADIUS = 8;
     var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
     var groundPoint = new THREE.Vector3();
 
-    // Groupes pour les hotspots 3D (visibles en VR)
+    // Groupes pour les hotspots 3D
     var hotspotGroup = new THREE.Group();
     var hotspotMarkers = [];
     var groundHotspotGroup = new THREE.Group();
@@ -96,45 +71,6 @@
         });
 
         return nearest;
-    }
-
-    function screenPointForHotspot(hotspot) {
-        var vec = hotspot.positionVector.clone();
-        vec.project(window.tourState.camera);
-
-        if (vec.z > 1 || vec.z < -1) {
-            return null;
-        }
-
-        return {
-            x: (vec.x + 1) / 2 * window.innerWidth,
-            y: (-vec.y + 1) / 2 * window.innerHeight
-        };
-    }
-
-    // -------------------------------------------------------------------------
-    // computeArrowAngle(hotspot)
-    //
-    // Calcule l'angle de rotation (en degrés) que doit avoir la flèche pour
-    // pointer vers le hotspot cible, en tenant compte de l'orientation actuelle
-    // de la caméra (window.tourState.lon).
-    //
-    // Fonctionnement :
-    //   1. On récupère la position 3D du hotspot (plan XZ, Y ignoré).
-    //   2. On calcule l'angle absolu du hotspot dans la sphère via atan2.
-    //   3. On soustrait le cap caméra (lon) pour obtenir l'angle RELATIF à la vue.
-    //
-    // Modifier cette fonction pour changer la logique directionnelle.
-    // -------------------------------------------------------------------------
-    function computeArrowAngle(hotspot) {
-        var pos = hotspot.positionVector;
-        // Angle absolu du hotspot dans le plan horizontal (XZ) de la sphère
-        // atan2(x, -z) : z négatif = devant, cohérent avec le système Three.js
-        var hotspotAngleDeg = Math.atan2(pos.z, pos.x) * (180 / Math.PI);
-        // Angle relatif : on retire le cap caméra pour que la flèche soit
-        // toujours dans le repère de l'écran et non du monde
-        var relativeAngle = hotspotAngleDeg - window.tourState.lon;
-        return relativeAngle;
     }
 
     function bearingForHotspot(hotspot) {
@@ -188,7 +124,6 @@
     }
 
     function createGroundHotspot() {
-        var bearingRad = 0;
         var ringGeo = new THREE.RingGeometry(GROUND_HOTSPOT_INNER_RADIUS, GROUND_HOTSPOT_OUTER_RADIUS, 64);
         var ringMat = new THREE.MeshBasicMaterial({
             color: 0xffffff,
@@ -209,12 +144,7 @@
 
         ringGeo.rotateX(-Math.PI / 2);
         hotspotMesh = new THREE.Mesh(ringGeo, ringMat);
-        hotspotMesh.position.set(
-            Math.sin(bearingRad) * GROUND_RADIUS,
-            GROUND_Y,
-            -Math.cos(bearingRad) * GROUND_RADIUS
-        );
-        hotspotMesh.rotation.y = bearingRad;
+        hotspotMesh.position.set(0, GROUND_Y, 0);
         hotspotMesh.renderOrder = 5;
 
         arrowShape = new THREE.Shape();
@@ -234,9 +164,7 @@
             depthWrite: false
         });
         arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
-        arrowMesh.position.copy(hotspotMesh.position);
-        arrowMesh.position.y += 0.01;
-        arrowMesh.rotation.y = bearingRad;
+        arrowMesh.position.set(0, GROUND_Y + 0.01, 0);
         arrowMesh.renderOrder = 6;
 
         groundHotspotGroup.add(hotspotMesh);
@@ -251,15 +179,7 @@
     }
 
     function initHotspots() {
-        floorHotspot = document.getElementById('floor-hotspot');
-        floorLabel = document.getElementById('floor-hotspot-label');
-        floorArrowSvg = document.getElementById('floor-arrow-svg');
-        cameraMarker = document.getElementById('camera-marker');
-        dirArrows = document.getElementById('dir-arrows');
         infoLayer = document.getElementById('info-hotspot-layer');
-        if (floorHotspot) {
-            floorHotspot.style.display = 'flex'; // [CORRECTION GSV] 'none' → 'flex' : le CSS définit display:flex, contrôler uniquement l'opacity
-        }
         infoLayer.innerHTML = '';
         infoElements = [];
 
@@ -274,7 +194,6 @@
         hotspotMarkers = [];
 
         currentHotspots().forEach(function (hotspot) {
-            // --- Logique HTML existante ---
             if (hotspot.type === 'info') {
                 var element = document.createElement('button');
                 element.type = 'button';
@@ -292,14 +211,12 @@
                 infoElements.push({ hotspot: hotspot, element: element });
             }
 
-            // --- NOUVEAU : Création du marqueur 3D pour la VR ---
             if (hotspot.type === 'transition') {
                 createGroundHotspot();
             }
 
             var marker = null;
             if (hotspot.type !== 'transition') {
-                // Sprite pour les infos
                 var canvas = document.createElement('canvas');
                 canvas.width = 64;
                 canvas.height = 64;
@@ -313,12 +230,12 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(hotspot.icon || 'i', 32, 32);
-                
+
                 var texture = new THREE.CanvasTexture(canvas);
                 var spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
                 marker = new THREE.Sprite(spriteMat);
                 marker.scale.set(20, 20, 1);
-                
+
                 marker.position.copy(hotspot.positionVector);
                 hotspotGroup.add(marker);
                 hotspotMarkers.push({ hotspot: hotspot, marker: marker });
@@ -346,20 +263,16 @@
         exitCtx.textAlign = 'center';
         exitCtx.textBaseline = 'middle';
         exitCtx.fillText('QUITTER VR', 64, 24);
-        
+
         var exitTexture = new THREE.CanvasTexture(exitCanvas);
         var exitMat = new THREE.SpriteMaterial({ map: exitTexture, transparent: true });
         var exitSprite = new THREE.Sprite(exitMat);
         exitSprite.scale.set(30, 12, 1);
-        // Positionné vers le bas pour ne pas gêner la vue centrale
-        exitSprite.position.set(0, -60, -150); 
+        exitSprite.position.set(0, -60, -150);
         hotspotGroup.add(exitSprite);
         hotspotMarkers.push({ hotspot: { type: 'exit' }, marker: exitSprite });
 
         // ---- Flèches directionnelles : avancer / reculer par ordre de nom ----
-        // Navigation séquentielle selon le numéro du fichier image :
-        //   1.JPG → 2.JPG → 3.JPG → ... → 10.JPG → 1.JPG  (circulaire)
-        // Indépendant des hotspots de sol définis dans config.js.
         var fwdBtn = document.getElementById('dir-arrow-fwd');
         var bwdBtn = document.getElementById('dir-arrow-bwd');
 
@@ -367,7 +280,7 @@
             fwdBtn.onclick = function () {
                 var hotspot = bestHotspotInView(+1);
                 if (hotspot && window.triggerGSVTransition) {
-                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
+                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
                 }
             };
         }
@@ -375,30 +288,18 @@
             bwdBtn.onclick = function () {
                 var hotspot = bestHotspotInView(-1);
                 if (hotspot && window.triggerGSVTransition) {
-                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
+                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
                 }
             };
         }
     }
 
-    // -------------------------------------------------------------------------
-    // getSequentialSceneIds()
-    // Retourne les IDs triés numériquement : ['1','2',...,'10']
-    // Construit dynamiquement depuis config.js — s'adapte sans modification
-    // si on ajoute/retire des scènes.
-    // -------------------------------------------------------------------------
     function getSequentialSceneIds() {
         var ids = Object.keys(window.TOUR_CONFIG.scenes);
         ids.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
         return ids;
     }
 
-    // -------------------------------------------------------------------------
-    // getAdjacentSceneId(direction)
-    // direction = +1 → scène suivante  |  -1 → scène précédente
-    // Navigation circulaire : 10 → 1  et  1 → 10
-    // Retourne null si une seule scène ou config vide.
-    // -------------------------------------------------------------------------
     function getAdjacentSceneId(direction) {
         var ids = getSequentialSceneIds();
         if (ids.length <= 1) { return null; }
@@ -417,9 +318,11 @@
         var bestScore = Infinity;
 
         transitionHotspots().forEach(function (hotspot) {
-            var relative = normalizeRelativeAngle(computeArrowAngle(hotspot));
-            var forwardScore = Math.abs(relative);
-            var backwardScore = Math.abs(Math.abs(relative) - 180);
+            var pos = hotspot.positionVector;
+            var hotspotAngleDeg = Math.atan2(pos.z, pos.x) * (180 / Math.PI);
+            var relativeAngle = hotspotAngleDeg - window.tourState.lon;
+            var forwardScore = Math.abs(normalizeRelativeAngle(relativeAngle));
+            var backwardScore = Math.abs(normalizeRelativeAngle(relativeAngle) - 180);
             var score = direction > 0 ? forwardScore : backwardScore;
 
             if (score < bestScore) {
@@ -438,11 +341,9 @@
 
         updateGroundHotspots();
 
-        // En mode VR, on cache les hotspots HTML (car ils sont invisibles dans le casque
-        // et polluent l'écran du PC) et on s'assure que les hotspots 3D sont visibles.
         var isVR = window.tourState.isXRActive;
         if (hotspotGroup) {
-            hotspotGroup.visible = true; // Toujours visible pour servir de base
+            hotspotGroup.visible = true;
         }
 
         infoElements.forEach(function (entry) {
@@ -466,13 +367,18 @@
         });
     }
 
+    // -------------------------------------------------------------------------
+    // updateGroundHotspots()
+    //
+    // Aimantation du mesh au sol + rotation directionnelle vers le hotspot
+    // cible le plus proche (atan2 sur position relative, pas bearing mondial).
+    // -------------------------------------------------------------------------
     function updateGroundHotspots() {
         var camera = window.tourState.camera;
         var targetOpacity = 0;
         var horizontalLength;
         var scale;
         var nearest;
-        var bearingRad;
 
         if (!camera || !groundHotspotEntry) {
             return;
@@ -506,15 +412,22 @@
 
             nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
             if (nearest) {
-                bearingRad = bearingForHotspot(nearest) * Math.PI / 180;
                 groundHotspotEntry.hotspot = nearest;
                 groundHotspotEntry.ring.position.copy(groundPoint);
                 groundHotspotEntry.arrow.position.copy(groundPoint);
                 groundHotspotEntry.arrow.position.y += 0.01;
-                groundHotspotEntry.ring.rotation.y = bearingRad;
-                groundHotspotEntry.arrow.rotation.y = bearingRad;
                 groundHotspotEntry.ring.userData.hotspot = nearest;
                 groundHotspotEntry.arrow.userData.hotspot = nearest;
+
+                // --- Rotation directionnelle vers le hotspot cible ---
+                // atan2(-dx, -dz) pour que la flèche pointe vers la cible
+                // (inversion 180° nécessaire pour le repère Three.js).
+                var dx = nearest.positionVector.x - groundPoint.x;
+                var dz = nearest.positionVector.z - groundPoint.z;
+                var angleToTarget = Math.atan2(-dx, -dz);
+                groundHotspotEntry.ring.rotation.y = angleToTarget;
+                groundHotspotEntry.arrow.rotation.y = angleToTarget;
+
                 targetOpacity = 0.85;
             }
         }
@@ -528,65 +441,6 @@
         groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, targetOpacity, 0.12);
         groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
         groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
-    }
-
-    function updateFloorHotspot(mouseX, mouseY, sphereLat) {
-        // [CORRECTION GSV] suppression de hideFloorHotspot(); return; qui court-circuitaient la fonction
-        if (!floorHotspot || !window.tourState.mouseSpherePoint || window.tourState.isTransitioning) {
-            return;
-        }
-
-        var onFloor = sphereLat < -10;
-
-        // Croix X : visible dès que la souris est sur le sol
-        if (cameraMarker) {
-            cameraMarker.classList.toggle('visible', onFloor);
-        }
-
-        // Flèches directionnelles fixes : visibles sur le sol
-        if (dirArrows) {
-            dirArrows.classList.toggle('visible', onFloor);
-        }
-
-        if (onFloor) {
-            var nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint);
-            var screenPoint = nearest ? screenPointForHotspot(nearest) : null;
-            if (nearest && screenPoint) {
-                floorHotspot.style.left = screenPoint.x + 'px';
-                floorHotspot.style.top = screenPoint.y + 'px';
-                floorHotspot.style.opacity = '1';
-                floorLabel.textContent = nearest.label || window.TOUR_CONFIG.scenes[nearest.target].name;
-                window.tourState.activeFloorHotspot = nearest;
-
-                // ---- Rotation directionnelle de la flèche ----
-                // computeArrowAngle() retourne l'angle relatif à la vue caméra.
-                // On applique la rotation via transform sur le conteneur SVG.
-                var angle = computeArrowAngle(nearest);
-                var arrow = document.getElementById('floor-arrow-svg');
-                if (arrow) {
-                    arrow.style.transform = 'rotate(' + angle + 'deg)';
-                }
-            } else {
-                floorHotspot.style.opacity = '0';
-                window.tourState.activeFloorHotspot = null;
-            }
-        } else {
-            floorHotspot.style.opacity = '0';
-            window.tourState.activeFloorHotspot = null;
-        }
-    }
-
-    function hideFloorHotspot() {
-        if (floorHotspot) {
-            floorHotspot.style.opacity = '0';
-        }
-        if (cameraMarker) {
-            cameraMarker.classList.remove('visible');
-        }
-        if (dirArrows) {
-            dirArrows.classList.remove('visible');
-        }
-        window.tourState.activeFloorHotspot = null;
     }
 
     function infoHitFromScreen(event) {
@@ -609,7 +463,7 @@
         var meshHit = groundHotspotFromEvent(event);
 
         if (meshHit && window.triggerGSVTransition) {
-            window.triggerGSVTransition(meshHit.target, bearingForHotspot(meshHit));
+            window.triggerGSVTransition(meshHit.target, bearingForHotspot(meshHit), { hotspot: meshHit });
             return;
         }
 
@@ -622,7 +476,7 @@
         var meshHit = groundHotspotFromEvent(event);
 
         if (meshHit && window.triggerGSVTransition) {
-            window.triggerGSVTransition(meshHit.target, bearingForHotspot(meshHit));
+            window.triggerGSVTransition(meshHit.target, bearingForHotspot(meshHit), { hotspot: meshHit });
         }
     }
 
@@ -647,7 +501,6 @@
         if (
             groundHotspotEntry &&
             groundHotspotEntry.hotspot &&
-            groundHotspotEntry.opacity > 0.2 &&
             window.tourState.mouseDelta < 5
         ) {
             return groundHotspotEntry.hotspot;
@@ -666,7 +519,6 @@
         var best = null;
         var bestDistance = threshold || 36;
 
-        // On inclut le bouton exit s'il est dans les types recherchés
         var searchHotspots = currentHotspots().concat([{
             type: 'exit',
             positionVector: new THREE.Vector3(0, -60, -150)
@@ -700,7 +552,7 @@
         }
 
         if (hotspot.type === 'transition' && window.triggerGSVTransition) {
-            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
+            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
         } else if (hotspot.type === 'info' && window.showVRInfoPanel) {
             window.showVRInfoPanel(hotspot);
         } else if (hotspot.type === 'exit' && window.exitVR) {
@@ -720,7 +572,6 @@
         var hotspot = findHotspotFromRay(ray, ['transition', 'info', 'exit'], 38);
         var progress = document.getElementById('reticle-progress');
 
-        // Réinitialisation de l'ancien hotspot survolé
         if (window.tourState.gazeTarget && window.tourState.gazeTarget !== hotspot) {
             var oldMarker = getMarkerForHotspot(window.tourState.gazeTarget);
             if (oldMarker) {
@@ -736,7 +587,6 @@
             return;
         }
 
-        // Highlight du nouveau hotspot
         var marker = getMarkerForHotspot(hotspot);
         if (marker) {
             if (marker.material.color) marker.material.color.set(0x3B82F6);
@@ -752,7 +602,7 @@
         if (hotspot.type === 'transition' && Date.now() - window.tourState.gazeStartTime > 2000) {
             progress.classList.remove('active');
             window.tourState.gazeTarget = null;
-            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot));
+            window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
         } else if (hotspot.type === 'info' && Date.now() - window.tourState.gazeStartTime > 1500) {
             progress.classList.remove('active');
             window.tourState.gazeTarget = null;
@@ -779,8 +629,6 @@
 
     window.initHotspots = initHotspots;
     window.updateHotspots = updateHotspots;
-    window.updateFloorHotspot = updateFloorHotspot;
-    window.hideFloorHotspot = hideFloorHotspot;
     window.onValidClick = onValidClick;
     window.onDoubleClick = onDoubleClick;
     window.handleXRSelect = handleXRSelect;
