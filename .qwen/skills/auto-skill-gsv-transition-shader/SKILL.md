@@ -50,20 +50,17 @@ if (uBlur > 0.001) {
 }
 ```
 
-### Shader B — Mosaic Load
+### Shader B — Crossfade (No Mosaic)
 
 **Vertex shader:** Pass-through.
 
-**Fragment shader:** If `uMosaic > 1.5`, quantizes UV coordinates into blocks via `floor(uv * 512.0 / blockSize) / (512.0 / blockSize)`. Final opacity via `uOpacity`.
+**Fragment shader:** Pure opacity crossfade. The mosaic/pixellation effect (`uMosaic`) has been **completely removed** — it caused unnecessary visual degradation and made transitions less smooth. The crossfade shader is intentionally minimalist:
 
-**Key GLSL snippet:**
 ```glsl
-if (uMosaic > 1.5) {
-    float blockSize = uMosaic;
-    vec2 mosaicUV = floor(uv * 512.0 / blockSize) / (512.0 / blockSize);
-    uv = mosaicUV;
-}
+gl_FragColor = vec4(color.rgb, color.a * uOpacity);
 ```
+
+**Why no mosaic?** The radial stretch + motion blur on sphere A already creates the characteristic GSV speed effect. Adding mosaic on sphere B was redundant and degraded image quality during the critical reveal moment.
 
 ### GSAP Timeline (900ms)
 

@@ -368,10 +368,35 @@
     }
 
     // -------------------------------------------------------------------------
+    // getActiveController()
+    //
+    // Retourne la manette WebXR active (celle qui a le focus ou la dernière
+    // utilisée). Parcourt tourState.xrControllers et retourne la première
+    // manette valide avec une matrixWorld à jour. Fallback sur le contrôleur 0.
+    // -------------------------------------------------------------------------
+    function getActiveController() {
+        var controllers = window.tourState.xrControllers;
+        if (!controllers || controllers.length === 0) {
+            return null;
+        }
+        // Parcourir pour trouver une manette avec matrixWorld valide
+        for (var i = 0; i < controllers.length; i += 1) {
+            if (controllers[i] && controllers[i].matrixWorld) {
+                return controllers[i];
+            }
+        }
+        return controllers[0] || null;
+    }
+
+    // -------------------------------------------------------------------------
     // updateGroundHotspots()
     //
     // Aimantation du mesh au sol + rotation directionnelle vers le hotspot
     // cible le plus proche (atan2 sur position relative, pas bearing mondial).
+    //
+    // Mode VR : utilise le pointeur laser de la manette active (pointer-based),
+    //           pas le regard de la caméra (gaze-based), pour éviter la fatigue
+    //           du cou. Guards anti-division-par-zéro et anti-sol-derrière.
     // -------------------------------------------------------------------------
     function updateGroundHotspots() {
         var camera = window.tourState.camera;
@@ -384,14 +409,59 @@
             return;
         }
 
-        // ── VR Mode : rayon depuis le regard de la caméra vers le sol ──
+        // ── VR Mode : rayon depuis la manette active vers le sol ──
         if (window.tourState.isXRActive) {
-            var vrRay = new THREE.Ray(
-                camera.getWorldPosition(new THREE.Vector3()),
-                camera.getWorldDirection(new THREE.Vector3())
-            );
+            var controller = getActiveController();
+            if (!controller) {
+                // Pas de manette disponible : masquer le hotspot
+                groundHotspotEntry.hotspot = null;
+                groundHotspotEntry.ring.userData.hotspot = null;
+                groundHotspotEntry.arrow.userData.hotspot = null;
+                groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, 0, 0.12);
+                groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
+                groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
+                return;
+            }
 
-            if (!window.tourState.isTransitioning && vrRay.intersectPlane(groundPlane, groundPoint)) {
+            // Extraire position et direction mondiales de la manette via matrixWorld
+            var ctrlMatrix = new THREE.Matrix4();
+            ctrlMatrix.identity().extractRotation(controller.matrixWorld);
+            var rayOrigin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
+            var rayDir = new THREE.Vector3(0, 0, -1).applyMatrix4(ctrlMatrix).normalize();
+
+            // Guard #1 : manette parallèle au sol (dir.y ≈ 0) → division par zéro imminente
+            if (Math.abs(rayDir.y) < 0.001) {
+                groundHotspotEntry.hotspot = null;
+                groundHotspotEntry.ring.userData.hotspot = null;
+                groundHotspotEntry.arrow.userData.hotspot = null;
+                groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, 0, 0.12);
+                groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
+                groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
+                return;
+            }
+
+            // Calcul manuel de l'intersection rayon ↔ plan Y = -2
+            // Évite le crash silencieux de Ray.intersectPlane() quand dir.y ≈ 0
+            var t = (-2 - rayOrigin.y) / rayDir.y;
+
+            // Guard #2 : t < 0 → le sol est derrière la manette
+            if (t < 0) {
+                groundHotspotEntry.hotspot = null;
+                groundHotspotEntry.ring.userData.hotspot = null;
+                groundHotspotEntry.arrow.userData.hotspot = null;
+                groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, 0, 0.12);
+                groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
+                groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
+                return;
+            }
+
+            if (!window.tourState.isTransitioning) {
+                groundPoint.set(
+                    rayOrigin.x + rayDir.x * t,
+                    -2,
+                    rayOrigin.z + rayDir.z * t
+                );
+
                 horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
                 if (horizontalLength > MAX_FOLLOW_RADIUS) {
                     scale = MAX_FOLLOW_RADIUS / horizontalLength;
@@ -672,6 +742,7 @@
     window.updateXRGaze = updateXRGaze;
     window.findHotspotFromRay = findHotspotFromRay;
     window.rebuildHotspots = initHotspots;
+    window.getActiveController = getActiveController;
     window.getGroundHotspotMeshes = function () {
         return allGroundHotspotMeshes.slice();
     };

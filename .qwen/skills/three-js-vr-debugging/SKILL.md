@@ -221,6 +221,112 @@ Remove these variables: `floorHotspot`, `floorLabel`, `floorArrowSvg`, `cameraMa
 
 ---
 
+### 10. Controllers Not Detected — `event.target` Passed Instead of `event`
+
+**Symptom:** VR controllers are visible (ray line shows) but pressing the trigger does nothing — no button clicks, no hotspot activation.
+
+**Root cause pattern:** In `setupXRControllers()` (main.js), the `select` event listener passes `event.target` (the controller object) to `window.handleXRSelect()`, but the handler expects a full `event` object and accesses `event.target` internally to build the raycaster.
+
+```javascript
+// WRONG — passes controller directly:
+controller.addEventListener('select', function (event) {
+    window.handleXRSelect(event.target);  // event.target is the controller
+});
+
+// RIGHT — passes the full event object:
+controller.addEventListener('select', function (event) {
+    window.handleXRSelect(event);  // handler does event.target to get controller
+});
+```
+
+**Diagnosis steps:**
+1. In `main.js`, find `setupXRControllers()` → the `select` listener.
+2. Check what is passed to `window.handleXRSelect()`.
+3. In `vr-ui.js`, find `handleXRSelect(event)` → verify it does `var controller = event.target`.
+4. If the call site passes `event.target` and the handler also accesses `.target`, the handler receives the controller as `event`, and `event.target` is `undefined`.
+
+**Fix:** Pass the full `event` object, not `event.target`.
+
+**Why it's easy to miss:** The controllers still render (the ray line is visible) because `scene.add(controller)` works independently. Only the interaction path is broken.
+
+---
+
+### 11. "Quitter VR" Button Crashes — Null `getSession()`
+
+**Symptom:** Clicking the "Quitter VR" button in the HUD throws `Cannot read property 'end' of null` and the session doesn't end.
+
+**Root cause pattern:** `exitVR()` calls `renderer.xr.getSession().end()` without checking if `getSession()` returns `null` (which it does when no session is active).
+
+```javascript
+// WRONG — crashes if no active session:
+function exitVR() {
+    renderer.xr.getSession().end();
+}
+
+// RIGHT — null-safe:
+function exitVR() {
+    var renderer = window.tourState.renderer;
+    if (!renderer) { return; }
+    var session = renderer.xr.getSession();
+    if (session) {
+        session.end();
+    }
+}
+```
+
+**Diagnosis steps:**
+1. In `ui.js`, find `exitVR()`.
+2. Check if there's a null check on `getSession()` before calling `.end()`.
+
+**Fix:** Store `getSession()` in a variable, check for null before calling `.end()`.
+
+---
+
+### 12. Ground Arrow Disappears in VR — No Mouse Input
+
+**Symptom:** The 3D floor arrow (ring + chevron) works in desktop mode but is completely invisible in VR.
+
+**Root cause pattern:** `updateGroundHotspots()` relies on `window.tourState.lastMouseX`/`lastMouseY` and `mouseSphereLat < -10` to position the arrow. In VR, there is no mouse input, so these values are never set, and the arrow stays at opacity 0.
+
+**Diagnosis steps:**
+1. In `hotspots.js`, find `updateGroundHotspots()`.
+2. Check if there's a branch for `window.tourState.isXRActive`.
+3. If the only ground detection path uses mouse NDC coordinates, it won't work in VR.
+
+**Fix:** Add a VR branch that raycasts from the camera's gaze direction to the ground plane:
+
+```javascript
+function updateGroundHotspots() {
+    // ... (existing setup)
+
+    if (window.tourState.isXRActive) {
+        // VR: ray from camera gaze to ground plane
+        var vrRay = new THREE.Ray(
+            camera.getWorldPosition(new THREE.Vector3()),
+            camera.getWorldDirection(new THREE.Vector3())
+        );
+        if (!window.tourState.isTransitioning && vrRay.intersectPlane(groundPlane, groundPoint)) {
+            // Same clamping + arrow positioning logic as mouse mode
+            // ...
+        }
+    } else {
+        // Desktop: existing mouse-based raycaster
+        // ...
+    }
+
+    // Shared opacity lerp (same for both modes)
+    groundHotspotEntry.opacity = THREE.MathUtils.lerp(
+        groundHotspotEntry.opacity, targetOpacity, 0.12
+    );
+}
+```
+
+**Key insight:** The VR branch uses `camera.getWorldPosition()` + `camera.getWorldDirection()` instead of mouse NDC. The rest of the algorithm (clamping, nearest hotspot search, `atan2(-dx, -dz)` rotation, opacity lerp) is identical.
+
+**Why it's easy to miss:** The arrow meshes still exist in the scene and are still rendered — they're just at opacity 0 because the update function never activates them.
+
+---
+
 ## Approved Modules for Bug Fixes
 
 These are the only files that should be modified during bug fixes:

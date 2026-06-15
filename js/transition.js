@@ -255,8 +255,15 @@
     // -------------------------------------------------------------------------
     // createRadialStretchMaterial()
     //
-    // Shader de la VIEILLE sphère (A) : étirement radial en vertex +
-    // motion blur directionnel radial en fragment.
+    // Shader de la VIEILLE sphère (A) : étirement radial en vertex (CC Scale
+    // Wipe) + motion blur directionnel radial en fragment.
+    //
+    // Le vertex shader travaille en NDC pour un étirement homogène par rapport
+    // au plan de l'écran. Le centre (radius < 0.2) reste fixe — point de fuite
+    // net. La périphère (radius > 1.3) subit l'étirement maximal.
+    //
+    // Le fragment shader moyenne 5 échantillons le long du vecteur radial
+    // vers le centre (0.5, 0.5) pour simuler un flou directionnel de vitesse.
     //
     // Uniforms animés par GSAP :
     //   uStretch  — étirement périphérique (0 → 0.4 → 0)
@@ -274,18 +281,38 @@
             vertexShader: [
                 'varying vec2 vUv;',
                 'uniform float uStretch;',
+                '',
                 'void main() {',
                 '    vUv = uv;',
+                '',
+                '    // ── Espace modèle → view → projection ──',
                 '    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
                 '    vec4 projected  = projectionMatrix * mvPosition;',
-                '    vec2 ndc        = projected.xy / projected.w;',
-                '    float radius    = length(ndc.xy);',
-                '    float mask      = smoothstep(0.2, 1.2, radius);',
-                '    vec2  dir       = (radius > 0.0001)',
-                '                      ? (ndc / radius)',
-                '                      : vec2(0.0);',
-                '    projected.xy   += dir * uStretch * mask * projected.w;',
-                '    gl_Position     = projected;',
+                '',
+                '    // ── Coordonnées NDC (avant division par w) ──',
+                '    // On travaille en NDC pour un étirement homogène',
+                '    // par rapport au plan de l\'écran.',
+                '    vec2 ndc    = projected.xy / projected.w;',
+                '    float radius = length(ndc.xy);',
+                '',
+                '    // ── Masque radial : centre fixe, périphérie étirée ──',
+                '    // smoothstep(0.2, 1.3) :',
+                '    //   radius < 0.2 → mask = 0 (centre parfaitement net)',
+                '    //   radius > 1.3 → mask = 1 (périphérie pleinement étirée)',
+                '    float mask = smoothstep(0.2, 1.3, radius);',
+                '',
+                '    // ── Direction radiale normalisée ──',
+                '    // Évite la division par zéro au centre exact',
+                '    vec2 dir = (radius > 0.0001)',
+                '               ? (ndc.xy / radius)',
+                '               : vec2(0.0);',
+                '',
+                '    // ── Étirement radial : déplace les sommets en NDC ──',
+                '    // projected.w assure l\'homogénéité en perspective.',
+                '    // Le masque garantit que le centre reste immobile.',
+                '    projected.xy += dir * uStretch * mask * projected.w;',
+                '',
+                '    gl_Position = projected;',
                 '}'
             ].join('\n'),
             fragmentShader: [
@@ -295,23 +322,31 @@
                 'varying vec2      vUv;',
                 '',
                 'void main() {',
+                '    // ── Couleur de base (pixel net) ──',
                 '    vec4 color = texture2D(uMap, vUv);',
                 '',
                 '    // ── Motion Blur directionnel radial ──',
-                '    // 5 échantillons le long du vecteur vers le centre (0.5, 0.5)',
+                '    // 5 échantillons le long du vecteur vers le centre (0.5, 0.5).',
+                '    // L\'intensité est proportionnelle à uBlur.',
                 '    if (uBlur > 0.001) {',
                 '        vec2 toCenter = vUv - vec2(0.5);',
-                '        float blurStrength = uBlur * 0.012;',
+                '        float blurStrength = uBlur * 0.015;',
                 '        vec4 blurSum = vec4(0.0);',
+                '',
+                '        // Échantillons symétriques : -2, -1, 0, +1, +2',
                 '        for (float i = 0.0; i < 5.0; i += 1.0) {',
                 '            float t = (i - 2.0) / 2.0;',
                 '            vec2 offset = toCenter * blurStrength * t;',
                 '            blurSum += texture2D(uMap, vUv - offset);',
                 '        }',
                 '        blurSum /= 5.0;',
+                '',
+                '        // Mix progressif : plus uBlur est élevé,',
+                '        // plus le flou domine sur le pixel net.',
                 '        color = mix(color, blurSum, uBlur);',
                 '    }',
                 '',
+                '    // ── Opacité de fondu sortant ──',
                 '    gl_FragColor = vec4(color.rgb, color.a * uOpacity);',
                 '}'
             ].join('\n'),
@@ -377,7 +412,7 @@
 
         var TOTAL_DURATION = 0.9;
         var DOLLY_DISTANCE = 80.0;
-        var MAX_STRETCH = 0.38;
+        var MAX_STRETCH = 0.4;
 
         var camera = window.tourState.camera;
         var scene = window.tourState.scene;
@@ -481,13 +516,14 @@
 
         // ── Timeline GSAP ─────────────────────────────────────────
         //
-        //  0.0s ──────── 0.45s : uStretch monte (0 → MAX_STRETCH)
-        //  0.0s ──────── 0.45s : uBlur monte (0 → 1, pic au centre)
-        //  0.0s ──────── 0.45s : uOpacity sphère A (1 → 0, fondu sortant)
+        //  0.0s ──────── 0.45s : uStretch monte (0 → 0.4, accélération)
+        //  0.0s ──────── 0.45s : uBlur monte (0 → 1, pic de vitesse)
+        //  0.0s ──────── 0.45s : uOpacity sphère A (1 → 0.5, fondu partiel)
         //  0.0s ──────── 0.9s  : dolly-in caméra (startPos → endPos)
-        //  0.36s ─────── 0.72s : uOpacity sphère B (0 → 1, fondu entrant)
-        //  0.45s ─────── 0.9s  : uStretch décroît (MAX_STRETCH → 0)
-        //  0.45s ─────── 0.9s  : uBlur décroît (1 → 0)
+        //  0.45s ─────── 0.9s  : uStretch décroît (0.4 → 0, résorption)
+        //  0.45s ─────── 0.9s  : uBlur décroît (1 → 0, netteté finale)
+        //  0.45s ─────── 0.9s  : uOpacity sphère A (0.5 → 0, fondu final)
+        //  0.4s  ─────── 0.76s : uOpacity sphère B (0 → 1, fondu entrant)
         //  0.9s          ───── : finalize()
         //
         var tl = gsap.timeline({
@@ -502,7 +538,7 @@
             }
         });
 
-        // Dolly-in caméra (toute la durée, easeInOut)
+        // ── Dolly-in caméra (toute la durée, easeInOut) ──
         tl.to(camera.position, {
             x: endPos.x,
             y: endPos.y,
@@ -513,7 +549,8 @@
 
         // ── Sphère A (vieille) : stretch + blur + fondu sortant ──
         if (stretchMat) {
-            // uStretch : montée 0 → MAX_STRETCH (0→450ms), puis descente (450→900ms)
+            // uStretch : montée 0 → 0.4 (0→450ms, power2.out = accélération)
+            //            puis descente 0.4 → 0 (450→900ms, power2.in = décélération)
             tl.to(stretchMat.uniforms.uStretch, {
                 value: MAX_STRETCH,
                 duration: TOTAL_DURATION * 0.5,
@@ -525,7 +562,10 @@
                 ease: 'power2.in'
             }, TOTAL_DURATION * 0.5);
 
-            // uBlur : cloche 0 → 1 → 0 (pic à 450ms)
+            // uBlur : cloche 0 → 1 → 0
+            //         montée (0→450ms) : power2.out — le flou s'intensifie vite
+            //         descente (450→900ms) : power2.in — retour progressif au net
+            //         Pic à 450ms = vitesse maximale perçue
             tl.to(stretchMat.uniforms.uBlur, {
                 value: 1.0,
                 duration: TOTAL_DURATION * 0.5,
@@ -537,12 +577,19 @@
                 ease: 'power2.in'
             }, TOTAL_DURATION * 0.5);
 
-            // uOpacity : fondu sortant (1 → 0) sur la première moitié
+            // uOpacity : fondu sortant en deux phases
+            //   Phase 1 (0→450ms) : 1 → 0.5, fondu partiel (le stretch domine)
+            //   Phase 2 (450→900ms) : 0.5 → 0, fondu final (le crossfade prend le relais)
+            tl.to(stretchMat.uniforms.uOpacity, {
+                value: 0.5,
+                duration: TOTAL_DURATION * 0.5,
+                ease: 'power1.in'
+            }, 0);
             tl.to(stretchMat.uniforms.uOpacity, {
                 value: 0,
                 duration: TOTAL_DURATION * 0.5,
                 ease: 'power1.in'
-            }, 0);
+            }, TOTAL_DURATION * 0.5);
         }
 
         // Sphère B : animation uOpacity déportée dans le .then() ci-dessus.
