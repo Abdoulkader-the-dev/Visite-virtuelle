@@ -523,8 +523,10 @@
 
     function exitVR() {
         var renderer = window.tourState.renderer;
-        if (renderer && renderer.xr.getSession()) {
-            renderer.xr.getSession().end();
+        if (!renderer) { return; }
+        var session = renderer.xr.getSession();
+        if (session) {
+            session.end();
         }
     }
 

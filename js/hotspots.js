@@ -384,51 +384,88 @@
             return;
         }
 
-        if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
-            mouseNDC.set(
-                (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
-                -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
+        // ── VR Mode : rayon depuis le regard de la caméra vers le sol ──
+        if (window.tourState.isXRActive) {
+            var vrRay = new THREE.Ray(
+                camera.getWorldPosition(new THREE.Vector3()),
+                camera.getWorldDirection(new THREE.Vector3())
             );
-        }
 
-        groundRaycaster.setFromCamera(mouseNDC, camera);
+            if (!window.tourState.isTransitioning && vrRay.intersectPlane(groundPlane, groundPoint)) {
+                horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
+                if (horizontalLength > MAX_FOLLOW_RADIUS) {
+                    scale = MAX_FOLLOW_RADIUS / horizontalLength;
+                    groundPoint.x *= scale;
+                    groundPoint.z *= scale;
+                } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
+                    scale = MIN_FOLLOW_RADIUS / horizontalLength;
+                    groundPoint.x *= scale;
+                    groundPoint.z *= scale;
+                }
 
-        if (
-            !window.tourState.isTransitioning &&
-            window.tourState.mouseSphereLat !== null &&
-            window.tourState.mouseSphereLat < -10 &&
-            groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
-        ) {
-            horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
-            if (horizontalLength > MAX_FOLLOW_RADIUS) {
-                scale = MAX_FOLLOW_RADIUS / horizontalLength;
-                groundPoint.x *= scale;
-                groundPoint.z *= scale;
-            } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
-                scale = MIN_FOLLOW_RADIUS / horizontalLength;
-                groundPoint.x *= scale;
-                groundPoint.z *= scale;
+                nearest = nearestTransitionHotspot(groundPoint);
+                if (nearest) {
+                    groundHotspotEntry.hotspot = nearest;
+                    groundHotspotEntry.ring.position.copy(groundPoint);
+                    groundHotspotEntry.arrow.position.copy(groundPoint);
+                    groundHotspotEntry.arrow.position.y += 0.01;
+                    groundHotspotEntry.ring.userData.hotspot = nearest;
+                    groundHotspotEntry.arrow.userData.hotspot = nearest;
+
+                    var dx = nearest.positionVector.x - groundPoint.x;
+                    var dz = nearest.positionVector.z - groundPoint.z;
+                    var angleToTarget = Math.atan2(-dx, -dz);
+                    groundHotspotEntry.ring.rotation.y = angleToTarget;
+                    groundHotspotEntry.arrow.rotation.y = angleToTarget;
+
+                    targetOpacity = 0.85;
+                }
+            }
+        } else {
+            // ── Mode souris classique ──
+            if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
+                mouseNDC.set(
+                    (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
+                    -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
+                );
             }
 
-            nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
-            if (nearest) {
-                groundHotspotEntry.hotspot = nearest;
-                groundHotspotEntry.ring.position.copy(groundPoint);
-                groundHotspotEntry.arrow.position.copy(groundPoint);
-                groundHotspotEntry.arrow.position.y += 0.01;
-                groundHotspotEntry.ring.userData.hotspot = nearest;
-                groundHotspotEntry.arrow.userData.hotspot = nearest;
+            groundRaycaster.setFromCamera(mouseNDC, camera);
 
-                // --- Rotation directionnelle vers le hotspot cible ---
-                // atan2(-dx, -dz) pour que la flèche pointe vers la cible
-                // (inversion 180° nécessaire pour le repère Three.js).
-                var dx = nearest.positionVector.x - groundPoint.x;
-                var dz = nearest.positionVector.z - groundPoint.z;
-                var angleToTarget = Math.atan2(-dx, -dz);
-                groundHotspotEntry.ring.rotation.y = angleToTarget;
-                groundHotspotEntry.arrow.rotation.y = angleToTarget;
+            if (
+                !window.tourState.isTransitioning &&
+                window.tourState.mouseSphereLat !== null &&
+                window.tourState.mouseSphereLat < -10 &&
+                groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
+            ) {
+                horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
+                if (horizontalLength > MAX_FOLLOW_RADIUS) {
+                    scale = MAX_FOLLOW_RADIUS / horizontalLength;
+                    groundPoint.x *= scale;
+                    groundPoint.z *= scale;
+                } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
+                    scale = MIN_FOLLOW_RADIUS / horizontalLength;
+                    groundPoint.x *= scale;
+                    groundPoint.z *= scale;
+                }
 
-                targetOpacity = 0.85;
+                nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
+                if (nearest) {
+                    groundHotspotEntry.hotspot = nearest;
+                    groundHotspotEntry.ring.position.copy(groundPoint);
+                    groundHotspotEntry.arrow.position.copy(groundPoint);
+                    groundHotspotEntry.arrow.position.y += 0.01;
+                    groundHotspotEntry.ring.userData.hotspot = nearest;
+                    groundHotspotEntry.arrow.userData.hotspot = nearest;
+
+                    var dx = nearest.positionVector.x - groundPoint.x;
+                    var dz = nearest.positionVector.z - groundPoint.z;
+                    var angleToTarget = Math.atan2(-dx, -dz);
+                    groundHotspotEntry.ring.rotation.y = angleToTarget;
+                    groundHotspotEntry.arrow.rotation.y = angleToTarget;
+
+                    targetOpacity = 0.85;
+                }
             }
         }
 

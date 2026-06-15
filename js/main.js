@@ -260,7 +260,7 @@
             controller.add(line);
             controller.addEventListener('select', function (event) {
                 if (window.handleXRSelect) {
-                    window.handleXRSelect(event.target);
+                    window.handleXRSelect(event);
                 }
             });
             scene.add(controller);
@@ -302,6 +302,9 @@
         }
         if (window.updateVRInfoPanelFrame) {
             window.updateVRInfoPanelFrame();
+        }
+        if (window.updateVRUI) {
+            window.updateVRUI();
         }
 
         window.tourState.renderer.render(window.tourState.scene, window.tourState.camera);

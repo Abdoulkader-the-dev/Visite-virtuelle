@@ -68,7 +68,13 @@
     }
 
     // -------------------------------------------------------------------------
-    //  buildVRUI() — Construit le groupe HUD attaché à la caméra
+    //  buildVRUI() — Construit le groupe HUD dans la scène mondiale
+    // -------------------------------------------------------------------------
+    //  Le HUD est ajouté à la scène (scene.add), PAS à la caméra.
+    //  C'est updateVRUI() qui repositionne le groupe chaque frame devant
+    //  l'utilisateur, en copiant position + rotation Y (yaw) de la caméra.
+    //  Cela évite le bug de matrice WebXR où camera.add() fausse le
+    //  raycasting des contrôleurs.
     // -------------------------------------------------------------------------
     function buildVRUI() {
         if (vrUiGroup) { return; }
@@ -121,8 +127,8 @@
         vrReticleMesh.renderOrder = 11;
         vrUiGroup.add(vrReticleMesh);
 
-        // Attacher le HUD à la caméra
-        window.tourState.camera.add(vrUiGroup);
+        // Ajouter le HUD à la scène mondiale (pas à la caméra)
+        window.tourState.scene.add(vrUiGroup);
     }
 
     // -------------------------------------------------------------------------
@@ -309,12 +315,32 @@
     }
 
     // -------------------------------------------------------------------------
-    //  updateVRUIFrame() — Met à jour la position du HUD chaque frame
+    //  updateVRUI() — Repositionne le HUD dans la scène mondiale chaque frame
     // -------------------------------------------------------------------------
-    function updateVRUIFrame() {
+    //  Copie la position de la caméra sur le groupe HUD, puis applique
+    //  uniquement la rotation Y (yaw) pour que les boutons restent horizontaux
+    //  et face à l'utilisateur, sans suivre le tangage (pitch) de la tête.
+    //  Le HUD est à z = -2 devant la caméra.
+    // -------------------------------------------------------------------------
+    function updateVRUI() {
         if (!vrUiGroup || !vrUiGroup.visible) { return; }
-        // Le HUD est attaché à la caméra, il suit automatiquement.
-        // On met à jour uniquement le reticule si besoin.
+
+        var camera = window.tourState.camera;
+
+        // 1. Copier la position exacte de la caméra
+        vrUiGroup.position.copy(camera.position);
+
+        // 2. Extraire uniquement le yaw (rotation Y) de la caméra
+        //    pour que le HUD reste horizontal, sans suivre le pitch/roll
+        var euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+        euler.x = 0; // annuler le tangage (pitch)
+        euler.z = 0; // annuler le roulis (roll)
+        vrUiGroup.quaternion.setFromEuler(euler);
+
+        // 3. Décaler le HUD à z = -2 devant l'utilisateur
+        var forward = new THREE.Vector3(0, 0, -2);
+        forward.applyQuaternion(vrUiGroup.quaternion);
+        vrUiGroup.position.add(forward);
     }
 
     // -------------------------------------------------------------------------
@@ -339,7 +365,7 @@
 
     window.initVRUI = initVRUI;
     window.handleXRSelect = handleXRSelect;
-    window.updateVRUIFrame = updateVRUIFrame;
+    window.updateVRUI = updateVRUI;
     window.showVRUI = showVRUI;
     window.hideVRUI = hideVRUI;
     window.showVRSceneMenu = showVRSceneMenu;

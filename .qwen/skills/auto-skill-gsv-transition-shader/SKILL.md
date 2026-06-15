@@ -1,8 +1,8 @@
 ---
 name: gsv-transition-shader
-description: Custom ShaderMaterial pair (radial stretch + mosaic load) for 900ms Google Street View-style transition in Three.js r128
+description: Custom ShaderMaterial pair (radial stretch + crossfade) for 900ms Google Street View-style transition in Three.js r128
 source: auto-skill
-extracted_at: '2026-06-15T11:09:12.662Z'
+extracted_at: '2026-06-15T14:31:20.166Z'
 ---
 
 ## GSV 900ms Transition — Dual ShaderMaterial Technique
@@ -17,7 +17,7 @@ When implementing a Google Street View-style transition between 360° panoramic 
 | Sphere | Shader | Purpose |
 |--------|--------|---------|
 | A (outgoing) | `createRadialStretchMaterial()` | Radial stretch + motion blur + fade out |
-| B (incoming) | `createMosaicLoadMaterial()` | Tile mosaic loading + fade in |
+| B (incoming) | `createCrossfadeMaterial()` | Pure opacity crossfade (no mosaic) |
 
 ### Shader A — Radial Stretch + Motion Blur
 
