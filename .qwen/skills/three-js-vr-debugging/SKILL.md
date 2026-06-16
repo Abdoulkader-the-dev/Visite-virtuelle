@@ -107,27 +107,27 @@ Also apply `stretch = edge * edge * uStretch` (squared) for smoother falloff.
 
 ### 5. Dolly Moving in Wrong Direction
 
-**Symptom:** Camera dolly-in goes toward screen center instead of toward the hotspot the user clicked.
+**Symptom:** Camera dolly-in goes toward screen center or in a flat PowerPoint-like slide instead of toward the hotspot the user clicked.
 
-**Root cause pattern:** `dollyTarget` calculated from `window.tourState.lon` (camera heading) instead of the actual hotspot bearing.
+**Root cause pattern:** `dollyDir` calculated from `window.tourState.lon` (camera heading) or from a fixed config bearing instead of the actual 3D position of the clicked hotspot.
 
 **Diagnosis steps:**
-1. In `triggerGSVTransition()`, check what value feeds `bearingRad`.
-2. It should be `transitionBearing` (the hotspot's bearing), NOT `window.tourState.lon`.
-3. Also verify: `startPosition = camera.position.clone()` is captured BEFORE any camera movement.
-4. The `dollyTarget` should derive from `startPosition`, not from `camera.position` (which changes during animation).
+1. In `triggerGSVTransition()`, check how `dollyDir` is computed.
+2. If it uses `Math.sin(lon * π/180)` / `Math.cos(lon * π/180)` from `tourState.lon`, it follows the gaze direction, not the hotspot.
+3. If it uses a fixed `bearingRad` from config, it ignores the actual hotspot position.
+4. The correct approach: normalize the hotspot's position vector from the origin:
+   ```js
+   var hx = clickedHotspot.position.x;
+   var hy = clickedHotspot.position.y || 0;
+   var hz = clickedHotspot.position.z;
+   var len = Math.sqrt(hx*hx + hy*hy + hz*hz);
+   dollyDir = new THREE.Vector3(hx/len, hy/len, hz/len);
+   ```
+5. The hotspot must be passed via `options.hotspot` from the click handler.
 
-**Modern defensive code:**
-```js
-var dollyDir = new THREE.Vector3(
-    Math.sin(bearingRad), 0, -Math.cos(bearingRad)
-).normalize();
-dollyTarget = new THREE.Vector3(
-    startPosition.x + dollyDir.x * DOLLY_DISTANCE,
-    startPosition.y,  // preserve Y
-    startPosition.z + dollyDir.z * DOLLY_DISTANCE
-);
-```
+**Fix:** Pass `{ hotspot: meshHit }` from `onDoubleClick`/`onValidClick`/`handleXRSelect` to `triggerGSVTransition`, then use `options.hotspot.position` for direction.
+
+**Why this matters:** Using `tourState.lon` produces a flat slide (the camera moves in the direction the user is looking, not toward the hotspot). Using the real `{x,y,z}` produces a true 3D walk-through effect.
 
 ---
 
@@ -185,18 +185,49 @@ dollyTarget = new THREE.Vector3(
 
 ---
 
-### 8. Camera Looks Backward After Transition (Missing 180° Inversion)
+### 8. Camera Looks Backward or Jumps After Transition (Wrong Final Lon)
 
-**Symptom:** After completing a transition, the camera faces the opposite direction from the movement.
+**Symptom:** After completing a transition, the camera faces the opposite direction, or the view "snaps" to an unexpected angle, breaking visual continuity.
 
-**Root cause pattern:** Panoramas are inherently "upside down" in 360° sphere mapping. The `finalize()` function sets `lon = normalizeDegrees(finalBearing)` without compensating.
+**Root cause pattern:** There are three progressively refined approaches:
+
+**Level 1 — Simple +180 (legacy, risks pop):**
+```js
+// BAD: forces a fixed bearing, ignores where user was looking
+window.tourState.lon = normalizeDegrees(finalBearing + 180);
+```
+This compensates for the sphere inversion (`geo.scale(-1, 1, 1)` is a mirror that reverses trigonometry) but forces a hard snap to the hotspot's bearing+180, discarding the user's prior look direction.
+
+**Level 2 — Preserve gaze direction (better but still flawed):**
+```js
+// BAD: ignores the dolly-in axis entirely
+// La transition GSAP a déjà orienté la caméra...
+```
+This preserves the exact pre-click gaze, but ignores the fact that walking through a doorway changes your facing direction by ~180°.
+
+**Level 3 — Relative look offset (CORRECT):**
+```js
+// GOOD: preserves the user's relative offset from the movement axis
+// At click time (in triggerGSVTransition):
+var movementAngle = Math.atan2(dollyDir.x, -dollyDir.z) * 180 / Math.PI;
+var relativeLookOffset = window.tourState.lon - movementAngle;
+
+// At arrival (in finalize):
+window.tourState.lon = normalizeDegrees(movementAngle + 180 - relativeLookOffset);
+```
+
+**Why subtraction (not addition)?** The sphere is mirrored (`scale(-1, 1, 1)`), which reverses the trigonometric sense. Adding the offset would produce a 180° turn to the back. Subtracting preserves the correct left/right relative direction.
 
 **Diagnosis steps:**
-1. In `finalize()` inside `triggerGSVTransition()`, find the line setting `window.tourState.lon`.
-2. If it's `normalizeDegrees(finalBearing)`, the camera looks backward.
-3. The correct value: `normalizeDegrees(finalBearing + 180)`.
+1. In `finalize()`, check the formula for `window.tourState.lon`.
+2. If it's a fixed bearing or just preserves the old `lon`, upgrade to Level 3.
+3. Verify `relativeLookOffset` is computed in `triggerGSVTransition()` at click time (not in `finalize`).
 
-**Fix:** Add `+ 180` to the final longitude assignment. This compensates for the native inversion of 360° panoramic images.
+**Concrete example:**
+- User looks at `lon = 120°`, clicks hotspot with `movementAngle = -145°` (= 215°)
+- `relativeLookOffset = 120 - (-145) = 265°`
+- Arrival: `normalizeDegrees(-145 + 180 - 265) = normalizeDegrees(-230) = 130°`
+- Result: user looked at 120° before, looks at 130° after — smooth continuity (only 10° geometric adjustment).
 
 ---
 

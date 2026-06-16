@@ -67,7 +67,7 @@
             tryNext();
         });
     }
-    
+
     window.loadTourTexture = loadTexture;
 
     function preloadLinkedScenes(sceneId) {
@@ -78,7 +78,7 @@
 
         sceneConfig.hotspots.forEach(function (hotspot) {
             if (hotspot.type === 'transition' && window.TOUR_CONFIG.scenes[hotspot.target]) {
-                loadTexture(window.TOUR_CONFIG.scenes[hotspot.target].image).catch(function () {});
+                loadTexture(window.TOUR_CONFIG.scenes[hotspot.target].image).catch(function () { });
             }
         });
     }
@@ -113,7 +113,7 @@
 
             idle = function () {
                 loadTexture(window.TOUR_CONFIG.scenes[ids[index]].image)
-                    .catch(function () {})
+                    .catch(function () { })
                     .then(function () {
                         loadNext(ids, index + 1);
                     });
@@ -167,9 +167,13 @@
             window.tourState.sphere.material.needsUpdate = true;
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
-            window.tourState.lon = typeof options.initialLon === 'number'
-                ? options.initialLon
-                : (sceneConfig.defaultLon !== undefined ? sceneConfig.defaultLon : 0);
+
+            if (options.isInitialLoad && sceneConfig.defaultLon !== undefined) {
+                window.tourState.lon = ((sceneConfig.defaultLon % 360) + 360) % 360;
+            } else if (typeof options.initialLon === 'number') {
+                window.tourState.lon = options.initialLon;
+            }
+
             window.tourState.lat = typeof options.initialLat === 'number' ? options.initialLat : 0;
             window.tourState.fov = typeof options.initialFov === 'number' ? options.initialFov : 75;
             window.tourState.camera.fov = window.tourState.fov;
@@ -377,14 +381,20 @@
         if (window.initVRUI) {
             window.initVRUI();
         }
+        if (window.initXRControls) {
+            window.initXRControls();
+        }
 
         setupXRControllers();
         window.addEventListener('resize', onResize);
 
         var startParams = getStartParams();
 
-        loadScene(startParams.scene).then(function () {
-            window.tourState.lon = startParams.lon;
+        loadScene(startParams.scene, { isInitialLoad: true }).then(function () {
+            // Si un lon explicite est passé en URL, il écrase le defaultLon
+            if (startParams.lon !== 0) {
+                window.tourState.lon = startParams.lon;
+            }
             window.tourState.lat = startParams.lat;
             preloadAllScenes();
         });

@@ -41,6 +41,11 @@
     var groundHotspotEntry = null;
     var allGroundHotspotMeshes = [];
 
+    // Cercles de positionnement rouges au sol (pulse)
+    var pulseCircles = [];
+    var PULSE_CIRCLE_RADIUS = 0.25;
+    var pulseCircleTexture = null;
+
     function currentHotspots() {
         return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots;
     }
@@ -121,6 +126,176 @@
         groundHotspotGroup = new THREE.Group();
         groundHotspotEntry = null;
         allGroundHotspotMeshes = [];
+        clearPulseCircles();
+    }
+
+    // -------------------------------------------------------------------------
+    // createPulseCircleTexture()
+    //
+    // Génère une CanvasTexture réutilisable : disque rouge vif translucide
+    // avec contours adoucis (radial gradient). Taille 128×128, cercle centré.
+    // -------------------------------------------------------------------------
+    function createPulseCircleTexture() {
+        if (pulseCircleTexture) {
+            return pulseCircleTexture;
+        }
+
+        var size = 128;
+        var canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        var ctx = canvas.getContext('2d');
+        var cx = size / 2;
+        var cy = size / 2;
+        var r = size / 2 - 2;
+
+        // Radial gradient : centre opaque → bord adouci
+        var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        grad.addColorStop(0, 'rgba(220, 38, 38, 0.7)');
+        grad.addColorStop(0.6, 'rgba(220, 38, 38, 0.55)');
+        grad.addColorStop(0.85, 'rgba(220, 38, 38, 0.3)');
+        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Point central net pour un ancrage visuel précis
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        pulseCircleTexture = new THREE.CanvasTexture(canvas);
+        return pulseCircleTexture;
+    }
+
+    // -------------------------------------------------------------------------
+    // clearPulseCircles()
+    //
+    // Supprime tous les cercles de positionnement : tue les tweens GSAP,
+    // retire les meshes de la scène, dispose geometry + material.
+    // -------------------------------------------------------------------------
+    function clearPulseCircles() {
+        pulseCircles.forEach(function (entry) {
+            if (entry.tween) {
+                entry.tween.kill();
+            }
+            if (entry.mesh) {
+                window.tourState.scene.remove(entry.mesh);
+                entry.mesh.geometry.dispose();
+                if (entry.mesh.material) {
+                    entry.mesh.material.dispose();
+                }
+            }
+        });
+        pulseCircles = [];
+    }
+
+    // -------------------------------------------------------------------------
+    // projectHotspotToGround(position)
+    //
+    // Projette une position 3D de hotspot sur le plan Y = -2 (GROUND_Y).
+    // La caméra étant à l'origine (0,0,0.001), on trace un rayon depuis
+    // l'origine vers le hotspot et on calcule l'intersection avec Y = -2.
+    //
+    // Résultat : un point au sol qui représente "l'endroit vers lequel
+    // le hotspot pointe vu d'en haut", exactement là où l'utilisateur
+    // s'attend à voir un indicateur de destination.
+    // -------------------------------------------------------------------------
+    function projectHotspotToGround(position) {
+        var dir = new THREE.Vector3(position.x, position.y, position.z).normalize();
+        // Rayon depuis l'origine (0,0,0) vers la direction du hotspot
+        // Intersection avec plan Y = -2 : t = GROUND_Y / dir.y
+        // Mais dir.y peut être 0 ou positif (hotspot au-dessus de l'horizon)
+        // On utilise la projection horizontale : on ramène le point sur Y = -2
+        // en conservant le ratio x/z de la direction horizontale.
+        var horizontalDist = Math.sqrt(position.x * position.x + position.z * position.z);
+        if (horizontalDist < 0.001) {
+            // Hotspot vertical (au-dessus/en-dessous) : placer à l'origine
+            return new THREE.Vector3(0, GROUND_Y, 0);
+        }
+        // Facteur d'échelle pour amener y à GROUND_Y
+        var t = GROUND_Y / dir.y;
+        // Si t < 0, le hotspot est derrière/en haut — on clamp
+        if (t < 0) {
+            t = Math.abs(t);
+        }
+        // Clamp à une distance raisonnable pour rester visible
+        var maxGroundDist = 200;
+        var px = dir.x * t;
+        var pz = dir.z * t;
+        var groundDist = Math.sqrt(px * px + pz * pz);
+        if (groundDist > maxGroundDist) {
+            var scale = maxGroundDist / groundDist;
+            px *= scale;
+            pz *= scale;
+        }
+        return new THREE.Vector3(px, GROUND_Y, pz);
+    }
+
+    // -------------------------------------------------------------------------
+    // createPulseCircles()
+    //
+    // Crée un cercle rouge couché au sol pour chaque hotspot de transition
+    // de la scène courante. La position au sol est obtenue en projetant
+    // les coordonnées 3D du hotspot sur le plan Y = -2 depuis l'origine.
+    // Animation GSAP pulse : scale 1→1.3 + opacity pulse,
+    // yoyo infini, déphasage pour éviter la synchro parfaite.
+    // -------------------------------------------------------------------------
+    function createPulseCircles() {
+        clearPulseCircles();
+
+        var texture = createPulseCircleTexture();
+        var hotspots = transitionHotspots();
+
+        hotspots.forEach(function (hotspot, index) {
+            var groundPos = projectHotspotToGround(hotspot.position);
+
+            var geo = new THREE.PlaneGeometry(
+                PULSE_CIRCLE_RADIUS * 2,
+                PULSE_CIRCLE_RADIUS * 2
+            );
+            geo.rotateX(-Math.PI / 2);
+
+            var mat = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+
+            var mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(groundPos.x, groundPos.y + 0.02, groundPos.z);
+            mesh.renderOrder = 4;
+            mesh.userData.hotspot = hotspot;
+
+            window.tourState.scene.add(mesh);
+
+            // Déphasage pour éviter que tous les cercles pulsent en même temps
+            var delay = index * 0.15;
+
+            var tween = gsap.to(mesh.scale, {
+                x: 1.3,
+                y: 1.3,
+                z: 1.3,
+                duration: 0.8,
+                ease: 'sine.inOut',
+                yoyo: true,
+                repeat: -1,
+                delay: delay,
+                onUpdate: function () {
+                    // Pulse d'opacité synchronisé : 0.6 → 0.35
+                    var s = mesh.scale.x;
+                    var normalized = (s - 1.0) / 0.3; // 0→1
+                    mesh.material.opacity = 0.6 - normalized * 0.25;
+                }
+            });
+
+            pulseCircles.push({ mesh: mesh, tween: tween });
+        });
     }
 
     function createGroundHotspot() {
@@ -246,6 +421,8 @@
             window.tourState.scene.add(hotspotGroup);
             window.tourState.scene.add(groundHotspotGroup);
         }
+
+        createPulseCircles();
 
         // ---- Flèches directionnelles : avancer / reculer par ordre de nom ----
         var fwdBtn = document.getElementById('dir-arrow-fwd');
