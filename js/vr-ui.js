@@ -155,6 +155,81 @@
         }
     }
 
+    // -------------------------------------------------------------------------
+    //  handleVRJoystick() — Gestion du joystick VR
+    // -------------------------------------------------------------------------
+    function handleVRJoystick(event) {
+        var controller = event.target;
+        var axes = event.data.axes;
+
+        if (!axes || axes.length < 2) return;
+
+        var x = axes[0];
+        var y = axes[1];
+        var deadZone = 0.2;
+
+        // Zone morte
+        if (Math.abs(x) < deadZone && Math.abs(y) < deadZone) {
+            return;
+        }
+
+        // Normaliser
+        var magnitude = Math.sqrt(x * x + y * y);
+        if (magnitude > 1) {
+            x /= magnitude;
+            y /= magnitude;
+        }
+
+        // Rotation horizontale
+        if (Math.abs(x) > deadZone) {
+            window.tourState.lon -= x * 1.5;
+            window.tourState.lastInteractionTime = Date.now();
+        }
+
+        // Avancer/Reculer (cherche un hotspot)
+        if (Math.abs(y) > deadZone) {
+            var direction = y < 0 ? 1 : -1; // Joystick haut = avancer
+            var camera = window.tourState.camera;
+
+            if (camera) {
+                // Direction du regard
+                var forwardDir = new THREE.Vector3(0, 0, -1);
+                forwardDir.applyQuaternion(camera.quaternion);
+                forwardDir.y = 0;
+                forwardDir.normalize();
+
+                // Chercher un hotspot dans cette direction
+                var scene = window.TOUR_CONFIG.scenes[window.tourState.currentScene];
+                if (scene && scene.hotspots) {
+                    var bestHotspot = null;
+                    var bestAngle = Infinity;
+
+                    scene.hotspots.forEach(function (hotspot) {
+                        if (hotspot.type !== 'transition') return;
+
+                        var pos = hotspot.positionVector;
+                        var dirToHotspot = new THREE.Vector3(pos.x, 0, pos.z).normalize();
+                        var dot = forwardDir.dot(dirToHotspot);
+                        var angle = Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
+
+                        if (direction < 0) {
+                            angle = 180 - angle;
+                        }
+
+                        if (angle < bestAngle) {
+                            bestAngle = angle;
+                            bestHotspot = hotspot;
+                        }
+                    });
+
+                    if (bestHotspot && bestAngle < 45 && window.triggerGSVTransition) {
+                        window.triggerGSVTransition(bestHotspot.target, bearingForHotspot(bestHotspot), { hotspot: bestHotspot });
+                    }
+                }
+            }
+        }
+    }
+    window.handleVRJoystick = handleVRJoystick;
     window.initVRUI = initVRUI;
     window.handleXRSelect = handleXRSelect;
     window.updateVRUI = updateVRUI;

@@ -321,6 +321,7 @@
         hotspotMesh = new THREE.Mesh(ringGeo, ringMat);
         hotspotMesh.position.set(0, GROUND_Y, 0);
         hotspotMesh.renderOrder = 5;
+        hotspotMesh.userData.isGroundHotspot = true; // 🔥 MARQUEUR POUR VR
 
         arrowShape = new THREE.Shape();
         arrowShape.moveTo(0, 0.3 * GROUND_HOTSPOT_ARROW_SCALE);
@@ -341,9 +342,16 @@
         arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
         arrowMesh.position.set(0, GROUND_Y + 0.01, 0);
         arrowMesh.renderOrder = 6;
+        arrowMesh.userData.isGroundHotspot = true; // 🔥 MARQUEUR POUR VR
 
         groundHotspotGroup.add(hotspotMesh);
         groundHotspotGroup.add(arrowMesh);
+
+        // 🔥 IMPORTANT : s'assurer que le groupe est dans la scène
+        if (window.tourState.scene && !window.tourState.scene.children.includes(groundHotspotGroup)) {
+            window.tourState.scene.add(groundHotspotGroup);
+        }
+
         groundHotspotEntry = {
             hotspot: null,
             ring: hotspotMesh,
@@ -419,12 +427,14 @@
 
         if (window.tourState.scene) {
             window.tourState.scene.add(hotspotGroup);
-            window.tourState.scene.add(groundHotspotGroup);
+            if (!window.tourState.scene.children.includes(groundHotspotGroup)) {
+                window.tourState.scene.add(groundHotspotGroup);
+            }
         }
 
         createPulseCircles();
 
-        // ---- Flèches directionnelles : avancer / reculer par ordre de nom ----
+        // ---- Flèches directionnelles ----
         var fwdBtn = document.getElementById('dir-arrow-fwd');
         var bwdBtn = document.getElementById('dir-arrow-bwd');
 
@@ -773,8 +783,19 @@
     // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
     // "Quitter" soit intercepté par la flèche.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // handleXRSelect() — Gâchette manette : teste d'abord le bouton Quitter VR,
+    // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
+    // "Quitter" soit intercepté par la flèche.
+    // -------------------------------------------------------------------------
     function handleXRSelect(event) {
         var controller = event.target;
+
+        // Vérifier que le contrôleur a une matrixWorld valide
+        if (!controller || !controller.matrixWorld) {
+            return;
+        }
+
         var tempMatrix = new THREE.Matrix4();
         tempMatrix.identity().extractRotation(controller.matrixWorld);
 
@@ -791,13 +812,63 @@
             }
         }
 
-        // ── Étape 2 : flèche au sol (hotspot de navigation) ──────────
-        if (allGroundHotspotMeshes.length > 0) {
-            var hits = raycaster.intersectObjects(allGroundHotspotMeshes, false);
-            if (hits.length > 0) {
-                var hotspot = hits[0].object.userData.hotspot;
-                if (hotspot && hotspot.type === 'transition' && window.triggerGSVTransition) {
-                    window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
+        // ── Étape 2 : Récupérer TOUS les meshes de hotspots au sol ──
+        // On les prend depuis groundHotspotGroup (groupe parent)
+        var groundMeshes = [];
+        if (groundHotspotGroup) {
+            groundHotspotGroup.children.forEach(function (child) {
+                if (child.type === 'Mesh') {
+                    groundMeshes.push(child);
+                }
+            });
+        }
+
+        // Fallback : utiliser allGroundHotspotMeshes
+        if (groundMeshes.length === 0) {
+            groundMeshes = allGroundHotspotMeshes;
+        }
+
+        if (groundMeshes.length === 0) {
+            console.log('[XR] Aucun mesh hotspot trouvé');
+            return;
+        }
+
+        // ── Étape 3 : Raycasting sur les meshes ──
+        var hits = raycaster.intersectObjects(groundMeshes, false);
+
+        if (hits.length > 0) {
+            var hitObject = hits[0].object;
+            var hotspot = hitObject.userData.hotspot;
+
+            // Si le mesh n'a pas de hotspot, remonter dans le parent
+            if (!hotspot && hitObject.parent) {
+                hotspot = hitObject.parent.userData.hotspot;
+            }
+
+            // Si toujours pas, chercher dans les données du mesh parent
+            if (!hotspot && groundHotspotEntry) {
+                hotspot = groundHotspotEntry.hotspot;
+            }
+
+            if (hotspot && hotspot.type === 'transition' && window.triggerGSVTransition) {
+                console.log('[XR] 🎯 Hotspot détecté:', hotspot.label, '→', hotspot.target);
+                window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
+            } else {
+                console.log('[XR] Hotspot trouvé mais non valide:', hotspot);
+            }
+        } else {
+            // ── Pas de hit direct : essayer avec le hotspot actif ──
+            if (groundHotspotEntry && groundHotspotEntry.hotspot) {
+                var activeHotspot = groundHotspotEntry.hotspot;
+                if (activeHotspot.type === 'transition' && window.triggerGSVTransition) {
+                    // Vérifier si le rayon est proche du hotspot actif
+                    var hotspotPos = activeHotspot.positionVector;
+                    var distToHotspot = raycaster.ray.origin.distanceTo(hotspotPos);
+
+                    if (distToHotspot < 50) {
+                        console.log('[XR] 🎯 Hotspot actif détecté (fallback):', activeHotspot.label);
+                        window.triggerGSVTransition(activeHotspot.target, bearingForHotspot(activeHotspot), { hotspot: activeHotspot });
+                    }
                 }
             }
         }

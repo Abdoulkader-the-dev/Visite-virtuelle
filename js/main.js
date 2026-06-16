@@ -253,6 +253,8 @@
 
         for (var i = 0; i < 2; i += 1) {
             var controller = renderer.xr.getController(i);
+
+            // Rayon laser
             var geometry = new THREE.BufferGeometry().setFromPoints([
                 new THREE.Vector3(0, 0, 0),
                 new THREE.Vector3(0, 0, -4)
@@ -262,11 +264,21 @@
             line.name = 'controller-ray';
             line.scale.z = 1;
             controller.add(line);
+
+            // 🔥 Écouteur SELECT (clic)
             controller.addEventListener('select', function (event) {
                 if (window.handleXRSelect) {
                     window.handleXRSelect(event);
                 }
             });
+
+            // 🔥 Écouteur JOYSTICK (thumbstick)
+            controller.addEventListener('thumbstickmoved', function (event) {
+                if (window.handleVRJoystick) {
+                    window.handleVRJoystick(event);
+                }
+            });
+
             scene.add(controller);
             window.tourState.xrControllers.push(controller);
         }
