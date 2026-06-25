@@ -62,37 +62,61 @@ gl_FragColor = vec4(color.rgb, color.a * uOpacity);
 
 **Why no mosaic?** The radial stretch + motion blur on sphere A already creates the characteristic GSV speed effect. Adding mosaic on sphere B was redundant and degraded image quality during the critical reveal moment.
 
-### GSAP Timeline (900ms)
+### GSAP Timeline (900ms) — Actual Code Values
 
 ```
-0.0s ──────── 0.45s : uStretch A (0 → MAX_STRETCH), uBlur A (0 → 1)
-0.0s ──────── 0.45s : uOpacity A (1 → 0)
-0.0s ──────── 0.9s  : dolly camera (startPos → endPos)
-0.36s ─────── 0.72s : uOpacity B (0 → 1), uMosaic B (20 → 1)
-0.45s ─────── 0.9s  : uStretch A (MAX_STRETCH → 0), uBlur A (1 → 0)
-0.9s          ───── : finalize()
+0.0s ──────── 0.45s : uStretch A (0 → 0.4),      ease power2.out
+0.0s ──────── 0.45s : uBlur A (0 → 1.0),         ease power2.out
+0.0s ──────── 0.45s : uOpacity A (1 → 0.5),      ease power1.in
+0.0s ──────── 0.9s  : dolly camera,              ease power2.inOut
+0.4s ──────── 0.76s : uOpacity B (0 → 1),        ease power1.out
+0.45s ─────── 0.9s  : uStretch A (0.4 → 0),     ease power2.in
+0.45s ─────── 0.9s  : uBlur A (1.0 → 0),         ease power2.in
+0.45s ─────── 0.9s  : uOpacity A (0.5 → 0),      ease power1.in
+0.9s         ─────── : finalize()
 ```
+
+Key constants in actual code: `TOTAL_DURATION = 0.9`, `DOLLY_DISTANCE = 80.0`, `MAX_STRETCH = 0.4`.
 
 ### Critical Implementation Detail — Async Texture Loading
 
-The mosaic shader (B) depends on the target texture being loaded. The GSAP tweens for sphere B **must** be added inside the `.then()` of `loadTextureAsync()`, not at timeline construction time. At timeline build time, `mosaicMat` is still `null`.
+The crossfade shader (B) depends on the target texture being loaded. The GSAP tweens for sphere B **must** be added inside the `.then()` of `loadTextureAsync()`, not at timeline construction time. At timeline build time, `crossfadeMat` is still `null`.
 
 ```javascript
-var mosaicMat = null;
+var crossfadeMat = null;
+var textureReady = false;
+
 loadTextureAsync(sceneConfig.image).then(function (tex) {
-    mosaicMat = createMosaicLoadMaterial(tex);
-    nextSphere.material = mosaicMat;
+    crossfadeMat = createCrossfadeMaterial(tex);
+    nextSphere.material = crossfadeMat;
+    nextSphere.material.needsUpdate = true;
     textureReady = true;
 
     // Add tweens to existing timeline AFTER texture is ready
-    tl.to(mosaicMat.uniforms.uOpacity, { value: 1, ... }, TOTAL_DURATION * 0.4);
-    tl.to(mosaicMat.uniforms.uMosaic, { value: 1, ... }, TOTAL_DURATION * 0.4);
+    tl.to(crossfadeMat.uniforms.uOpacity, {
+        value: 1,
+        duration: TOTAL_DURATION * 0.4,
+        ease: 'power1.out'
+    }, TOTAL_DURATION * 0.4);
 });
+```
+
+The timeline's `onComplete` callback waits for `textureReady` before calling `finalize()`:
+```javascript
+onComplete: function () {
+    (function waitTexture() {
+        if (textureReady) {
+            finalize(nextSphere, oldSphere, targetSceneId);
+        } else {
+            setTimeout(waitTexture, 32);
+        }
+    })();
+}
 ```
 
 ### Common Pitfalls
 
-1. **Adding B-sphere tweens at timeline construction** — `mosaicMat` is `null`, tweens silently fail. Always defer to `.then()`.
-2. **Blur samples going out of bounds** — keep `blurStrength` small (≤ 0.012) to avoid sampling outside [0,1] UV range.
-3. **Mosaic blockSize = 1** — the `if (uMosaic > 1.5)` guard prevents division-by-zero artifacts when fully resolved.
-4. **Stretch mask edge values** — `smoothstep(0.2, 1.2)` keeps the center (0.2) sharp and fades by 1.2, matching GSV's fixed-center-periphery-stretch look.
+1. **Adding B-sphere tweens at timeline construction** — `crossfadeMat` is `null`, tweens silently fail. Always defer to `.then()`.
+2. **Blur samples going out of bounds** — keep `blurStrength` small (≤ 0.015) to avoid sampling outside [0,1] UV range.
+3. **Stretch mask edge values** — `smoothstep(0.2, 1.3)` keeps the center sharp and fades by 1.3, matching GSV's fixed-center-periphery-stretch look.
+4. **Forgetting `depthWrite: false`** on both sphere materials during transition — without it, z-fighting causes flickering between the two spheres.

@@ -100,7 +100,6 @@
             if (hotspot.type === 'transition' && hotspot.target === toSceneId) {
                 hotspot.bearing = newBearing;
                 found = true;
-                console.log('[BEARING] ✅ Mise à jour:', fromSceneId, '→', toSceneId, '=', newBearing);
             }
         });
         return found;
@@ -139,6 +138,29 @@
                     requestAnimationFrame(frame);
                 } else {
                     window.tourState.lon = targetLon;
+                    resolve();
+                }
+            }
+
+            requestAnimationFrame(frame);
+        });
+    }
+
+    function animateLatTransition(targetLat, duration) {
+        return new Promise(function (resolve) {
+            var start = performance.now();
+            var startLat = window.tourState.lat;
+            var delta = targetLat - startLat;
+
+            function frame(now) {
+                var progress = Math.min(1, (now - start) / duration);
+                var eased = progress * (2 - progress);
+                window.tourState.lat = startLat + delta * eased;
+
+                if (progress < 1) {
+                    requestAnimationFrame(frame);
+                } else {
+                    window.tourState.lat = targetLat;
                     resolve();
                 }
             }
@@ -425,7 +447,34 @@
         }
 
         var movementAngle = Math.atan2(dollyDir.x, -dollyDir.z) * (180 / Math.PI);
-        window.tourState.relativeLookOffset = window.tourState.lon - movementAngle;
+
+        // Direction de vue à l'arrivée : arrivalLon si calibré, sinon calcul auto
+        // GSV (préserve le décalage relatif entre la vue et la direction du dolly).
+        var arrivalTargetLon;
+        if (clickedHotspot && typeof clickedHotspot.arrivalLon === 'number') {
+            arrivalTargetLon = normalizeDegrees(clickedHotspot.arrivalLon);
+        } else {
+            var relativeLookOffset = window.tourState.lon - movementAngle;
+            arrivalTargetLon = normalizeDegrees(movementAngle + 180 - relativeLookOffset);
+        }
+
+        var arrivalTargetLat = (clickedHotspot && typeof clickedHotspot.arrivalLat === 'number')
+            ? clickedHotspot.arrivalLat
+            : 0;
+
+        // 🔧 FIX : la rotation vers arrivalLon ne doit JAMAIS être visible sur
+        // l'ANCIENNE scène (sinon on voit clairement "une direction, puis une
+        // autre" — exactement le symptôme observé). On retarde donc son départ
+        // jusqu'au moment où le crossfade commence à révéler la nouvelle image
+        // (40% de la timeline = 360ms), et elle se termine avec la fin du
+        // crossfade (80% = 720ms). lon ne bouge donc QUE pendant que la
+        // nouvelle scène est en train d'apparaître — jamais avant, jamais après.
+        var ROTATION_DELAY = TOTAL_DURATION * 0.4 * 1000;
+        var ROTATION_DURATION = TOTAL_DURATION * 0.4 * 1000;
+        setTimeout(function () {
+            animateLon(arrivalTargetLon, ROTATION_DURATION);
+            animateLatTransition(arrivalTargetLat, ROTATION_DURATION);
+        }, ROTATION_DELAY);
 
         var startPos = camera.position.clone();
         var endPos = new THREE.Vector3(
@@ -483,7 +532,7 @@
             onComplete: function () {
                 (function waitTexture() {
                     if (textureReady) {
-                        finalize(nextSphere, oldSphere, targetSceneId);
+                        finalize(nextSphere, oldSphere, targetSceneId, clickedHotspot);
                     } else {
                         setTimeout(waitTexture, 32);
                     }
@@ -534,7 +583,7 @@
             }, TOTAL_DURATION * 0.5);
         }
 
-        function finalize(next, old, targetId) {
+        function finalize(next, old, targetId, clickedHotspot) {
             if (old) {
                 scene.remove(old);
                 if (old.geometry) { old.geometry.dispose(); }
@@ -551,22 +600,20 @@
 
             var previousSceneId = window.tourState.currentScene;
             window.tourState.currentScene = targetId;
-            window.tourState.lat = 0;
             window.tourState.fov = 75;
             camera.fov = 75;
             camera.updateProjectionMatrix();
 
-            var newLon = normalizeDegrees(
-                movementAngle + 180 - window.tourState.relativeLookOffset
-            );
-            window.tourState.lon = newLon;
+            // 🔧 lon/lat ont déjà été animés en douceur vers leur valeur finale
+            // (arrivalTargetLon / arrivalTargetLat) en parallèle du dolly via
+            // animateLon()/animateLatTransition() — aucun saut, rien à faire ici.
 
             // ── MISE À JOUR DYNAMIQUE DU BEARING ──
             var reverseBearing = getReverseHotspotBearing(targetId, previousSceneId);
             if (reverseBearing !== null) {
                 updateHotspotBearing(previousSceneId, targetId, reverseBearing);
             } else {
-                var fallbackBearing = normalizeDegrees(newLon + 180);
+                var fallbackBearing = normalizeDegrees(arrivalTargetLon + 180);
                 updateHotspotBearing(previousSceneId, targetId, fallbackBearing);
             }
 
@@ -578,10 +625,12 @@
     }
 
     function startTransition(targetSceneId, options) {
-        var hotspot = options && options.hotspot
-            ? options.hotspot
+        var opts = options || {};
+        var hotspot = opts.hotspot
+            ? opts.hotspot
             : findTransitionHotspot(window.tourState.currentScene, targetSceneId);
-        triggerGSVTransition(targetSceneId, bearingForHotspot(hotspot), options);
+        opts.hotspot = hotspot;
+        triggerGSVTransition(targetSceneId, bearingForHotspot(hotspot), opts);
     }
 
     window.triggerGSVTransition = triggerGSVTransition;
