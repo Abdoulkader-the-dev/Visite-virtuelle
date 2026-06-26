@@ -421,6 +421,35 @@ Durée totale : **900ms**
 
 ---
 
+---
+
+## Écart avec le cahier des charges technique
+
+Le fichier `Cahier des Charges Technique - Visite Virtuelle WebXR 360.md` doit être considéré comme l'objectif de référence. L'état actuel du projet est avancé, mais il reste des écarts structurels à combler pour atteindre une conformité complète.
+
+### Écarts prioritaires
+
+- **Schéma de données** : le cahier impose `TourConfig.initial_node`, `nodes`, `Node360.texture_url/title` et `Hotspot.id_target/rotation_offset`; le projet utilise encore `scenes`, `image`, `target`, `bearing`, `arrivalLon` et `arrivalLat`.
+- **Pipeline d'assets** : les textures panoramiques sont encore chargées en JPEG via `TextureLoader`; le cahier exige du `KTX2` avec `toktx` et `KTX2Loader` configuré avec au moins 4 workers.
+- **Initialisation WebXR** : le renderer n'est pas initialisé exactement selon la spec (`antialias: false`, `powerPreference: "high-performance"`, `stencil: false`, `depth: true`, `setReferenceSpaceType('local')`).
+- **Locomotion VR** : la spec demande un `controllerRig` déplacé pendant les transitions; l'implémentation actuelle anime surtout la caméra directement.
+- **Mémoire** : le cache textures n'est pas borné à 5 entrées et il n'existe pas encore de vrai LRU conforme à la spec.
+- **UI 3D** : le cahier impose une UI opaque sans glassmorphism; le projet utilise encore des panneaux translucides avec `backdrop-filter`.
+
+### Écarts secondaires
+
+- **Minimap / navigation** : le cahier demande des courbes et des marqueurs plus proches de Street View.
+- **Collisions VR** : la spec parle de volumes de collision de type bounding boxes pour les hotspots.
+- **Rendu immersif** : le cahier vise une visite 360° stéréoscopique optimisée casque VR, ce qui nécessite encore une validation spécifique du pipeline final.
+
+### Ce qui est déjà aligné
+
+- Navigation 360° fonctionnelle.
+- Double sphère déjà présente.
+- Transition cinématique avancée.
+- Support WebXR avec contrôleurs, rayons et HUD VR minimal.
+- Nettoyage partiel des ressources graphiques lors des transitions.
+
 ## Performances et optimisations
 
 ### Texture Loading
