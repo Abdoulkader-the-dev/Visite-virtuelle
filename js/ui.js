@@ -338,10 +338,10 @@
             navigator.xr.isSessionSupported('immersive-vr').then(function (supported) {
                 if (supported) {
                     showButton('ENTRER EN VR', true);
-                    
+
                     button.onclick = function () {
                         if (!window.tourState.isXRActive) {
-                            var sessionInit = { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] };
+                            var sessionInit = { optionalFeatures: ['hand-tracking'] };
                             navigator.xr.requestSession('immersive-vr', sessionInit).then(function (session) {
                                 renderer.xr.setSession(session);
                             });

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentation — Visite Virtuelle 360°</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-alt: #161922;
+    --bg-code: #1a1e28;
+    --border: #232838;
+    --text: #e2e4ec;
+    --text-dim: #8b91a3;
+    --accent: #3b82f6;
+    --accent-dim: #1e3a5f;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --ok: #22c55e;
+    --sidebar-w: 260px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    display: flex;
+    min-height: 100vh;
+  }
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--bg-alt);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 24px 0;
+    z-index: 10;
+  }
+  #sidebar .brand { padding: 0 24px 20px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  #sidebar .brand h1 { font-size: 15px; font-weight: 700; color: #fff; line-height: 1.3; }
+  #sidebar .brand p { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  #nav { list-style: none; }
+  #nav li { margin: 1px 0; }
+  #nav a {
+    display: block; padding: 7px 24px; font-size: 13px; color: var(--text-dim);
+    text-decoration: none; border-left: 3px solid transparent; transition: all 0.15s;
+  }
+  #nav a:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  #nav a.active { color: var(--accent); border-left-color: var(--accent); background: rgba(59,130,246,0.06); }
+  main { margin-left: var(--sidebar-w); flex: 1; max-width: 900px; padding: 48px 56px 80px; }
+  section { margin-bottom: 56px; scroll-margin-top: 24px; }
+  h2 { font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 18px; font-weight: 600; color: #fff; margin: 28px 0 12px; }
+  h4 { font-size: 14px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+  p { margin-bottom: 14px; font-size: 14px; }
+  ul, ol { margin: 10px 0 16px 24px; font-size: 14px; }
+  li { margin-bottom: 6px; }
+  pre {
+    background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; margin: 14px 0 20px; overflow-x: auto; font-size: 13px;
+    line-height: 1.55; position: relative;
+  }
+  code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+  :not(pre) > code { background: var(--bg-code); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #93c5fd; border: 1px solid var(--border); }
+  .copy-btn {
+    position: absolute; top: 8px; right: 8px; background: var(--bg-alt);
+    border: 1px solid var(--border); color: var(--text-dim); font-size: 11px;
+    padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: all 0.15s;
+  }
+  .copy-btn:hover { color: #fff; border-color: var(--accent); }
+  .copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+  .callout {
+    border-left: 4px solid var(--accent); background: var(--accent-dim);
+    padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 13px;
+  }
+  .callout.warn { border-left-color: var(--warn); background: rgba(245,158,11,0.1); }
+  .callout.danger { border-left-color: var(--danger); background: rgba(239,68,68,0.1); }
+  .callout.ok { border-left-color: var(--ok); background: rgba(34,197,94,0.1); }
+  .callout strong { color: #fff; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13px; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-alt); font-weight: 600; color: #fff; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td code { font-size: 12px; }
+  .step { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; margin: 14px 0; }
+  .step-label { font-weight: 600; color: #fff; font-size: 14px; margin-bottom: 6px; }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; background: var(--accent); color: #fff;
+    font-size: 12px; font-weight: 700; border-radius: 50%; margin-right: 10px;
+  }
+  .faq-item { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+  .faq-q { padding: 14px 18px; font-weight: 600; font-size: 14px; color: #fff; cursor: pointer; background: var(--bg-alt); user-select: none; }
+  .faq-q:hover { background: var(--bg-code); }
+  .faq-a { padding: 14px 18px; font-size: 13px; border-top: 1px solid var(--border); display: none; }
+  .faq-item.open .faq-a { display: block; }
+  .file-tree {
+    background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12.5px; line-height: 1.8; margin: 14px 0; white-space: pre; overflow-x: auto;
+  }
+  @media (max-width: 900px) {
+    #sidebar { display: none; }
+    main { margin-left: 0; padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <div class="brand">
+    <h1>Visite Virtuelle 360°</h1>
+    <p>Documentation technique</p>
+  </div>
+  <ul id="nav">
+    <li><a href="#overview">Vue d'ensemble</a></li>
+    <li><a href="#architecture">Architecture & fichiers</a></li>
+    <li><a href="#add-scene">Ajouter une scène</a></li>
+    <li><a href="#config-ref">Référence config</a></li>
+    <li><a href="#transition">Transition GSV</a></li>
+    <li><a href="#vr">Mode VR / WebXR</a></li>
+    <li><a href="#limits">Limites connues</a></li>
+    <li><a href="#faq">FAQ / dépannage</a></li>
+  </ul>
+</aside>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     1. VUE D'ENSEMBLE
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="overview">
+  <h2>1. Vue d'ensemble</h2>
+  <p>Ce projet reproduit les mécaniques de navigation de <strong>Google Street View</strong> : 24 scènes panoramiques 360° (photos équirectangulaires prises à la GoPro) reliées par des hotspots cliquables au sol, avec une transition cinématique en 3 couches (dolly-in + flou radial + bascule nette). Fonctionne en <strong>mode desktop</strong> (souris/clavier/tactile) ET en <strong>VR WebXR</strong>.</p>
+
+  <h3>Stack technique</h3>
+  <table>
+    <tr><th>Technologie</th><th>Version</th><th>Usage</th></tr>
+    <tr><td>Three.js</td><td>r128 (CDN)</td><td>Rendu WebGL, sphères 360°, raycasting, WebXR</td></tr>
+    <tr><td>GSAP</td><td>locale (<code>js/gsap.min.js</code>)</td><td>Animations (transition, pulsation, zoom)</td></tr>
+    <tr><td>JavaScript</td><td>ES5+ vanilla</td><td>Logique métier — modules IIFE, pas de build</td></tr>
+    <tr><td>WebXR API</td><td>native</td><td>Mode VR immersif</td></tr>
+    <tr><td>GLSL</td><td>shaders sur mesure</td><td>Radial Stretch + crossfade</td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>Pas de build step, pas de framework.</strong> Le projet s'ouvre tel quel dans un navigateur. Les modules communiquent via <code>window.tourState</code> et des fonctions exposées sur <code>window</code>.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     2. ARCHITECTURE
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="architecture">
+  <h2>2. Architecture & fichiers</h2>
+
+  <h3>Arborescence JS</h3>
+  <div class="file-tree">js/
+├── config.js         → window.TOUR_CONFIG (graphe scènes + hotspots)
+├── state.js          → window.tourState (état mutable global)
+├── controls.js       → Entrées souris/tactile/clavier, raycaster sphérique
+├── hotspots.js       → Flèche 3D au sol, raycaster plan Y=-2, clic VR
+├── transition.js     → GSV 900ms : dolly + stretch + bascule nette
+├── ui.js             → Menu, minimap, boussole, zoom, fullscreen, partage
+├── vr-ui.js          → HUD VR minimal (bouton "Quitter VR" dans la scène)
+├── xr-controls.js    → Joystick, squeeze, bouton A/X (Meta Quest)
+└── main.js           → Bootstrap Three.js, boucle de rendu, chargement
+
+index.html            → Structure HTML + ordre de chargement des scripts
+hotspot-editor.html   → Outil d'édition visuelle des hotspots
+css/style.css         → Styles glassmorphism + animations
+images/12-35.JPG      → Photos 360° équirectangulaires (24 scènes)</div>
+
+  <h3>Ordre de chargement critique</h3>
+  <p>L'ordre des <code>&lt;script&gt;</code> dans <code>index.html</code> est une dépendance implicite — chaque module expose ses fonctions sur <code>window</code> AVANT que le suivant ne soit chargé. Ne jamais réordonner :</p>
+  <pre><code><span style="color:#6b7280">&lt;!-- index.html — ordre STRICT, ne pas modifier --&gt;</span>
+&lt;script src=<span style="color:#86efac">"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/gsap.min.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/config.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/state.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/controls.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/transition.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/hotspots.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/ui.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/vr-ui.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/xr-controls.js"</span>&gt;&lt;/script&gt;
+&lt;script src=<span style="color:#86efac">"js/main.js"</span>&gt;&lt;/script&gt;</code></pre>
+
+  <h3>État partagé : <code>window.tourState</code></h3>
+  <p>Défini dans <code>state.js</code>, c'est le cœur mutable de l'application :</p>
+  <table>
+    <tr><th>Propriété</th><th>Type</th><th>Rôle</th></tr>
+    <tr><td><code>currentScene</code></td><td>string</td><td>ID de la scène affichée (défaut <code>'12'</code>)</td></tr>
+    <tr><td><code>lon</code></td><td>number</td><td>Direction de vue horizontale (degrés, 0–360)</td></tr>
+    <tr><td><code>lat</code></td><td>number</td><td>Direction de vue verticale (degrés, -85 à +85)</td></tr>
+    <tr><td><code>fov</code></td><td>number</td><td>Champ de vision (défaut 75)</td></tr>
+    <tr><td><code>isTransitioning</code></td><td>bool</td><td>Bloque les contrôles pendant une transition</td></tr>
+    <tr><td><code>history</code></td><td>array</td><td>Pile des scènes visitées (max 50)</td></tr>
+    <tr><td><code>isXRActive</code></td><td>bool</td><td>Session VR en cours</td></tr>
+    <tr><td><code>xrControllers</code></td><td>array</td><td>Contrôleurs WebXR (0–1)</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     3. AJOUTER UNE SCÈNE
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="add-scene">
+  <h2>3. Comment ajouter une nouvelle scène</h2>
+  <p>C'est l'opération de maintenance la plus fréquente. Procédure complète, pièges inclus.</p>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">1</span> Obtenir la photo 360°</div>
+    <p>Photo équirectangulaire (ratio 2:1), format <code>.JPG</code> ou <code>.jpg</code>. Le chargeur essaie automatiquement 4 casses dans cet ordre : <code>.jpg</code>, <code>.JPG</code>, <code>.jpeg</code>, <code>.JPEG</code> — peu importe la casse réelle du fichier.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">2</span> Déposer le fichier</div>
+    <p>Placer l'image dans le dossier <code>images/</code> (ex. <code>images/40.JPG</code>).</p>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">3</span> Ajouter l'entrée dans <code>config.js</code></div>
+    <p>Dans <code>window.TOUR_CONFIG.scenes</code>, ajouter une clé avec un <strong>ID unique sous forme de string</strong> (ex. <code>'40'</code>). Aucune contrainte technique sur la numérotation — les ID actuels vont de <code>'12'</code> à <code>'35'</code> par convention, pas par obligation.</p>
+    <pre><code><span style="color:#86efac">'40'</span>: {
+    <span style="color:#93c5fd">name</span>: <span style="color:#86efac">'Nouvelle salle'</span>,
+    <span style="color:#93c5fd">image</span>: <span style="color:#86efac">'./images/40.JPG'</span>,
+    <span style="color:#93c5fd">minimapX</span>: <span style="color:#fbbf24">60</span>,
+    <span style="color:#93c5fd">minimapY</span>: <span style="color:#fbbf24">30</span>,
+    <span style="color:#93c5fd">hotspots</span>: []
+}</code></pre>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">4</span> Créer les hotspots de transition</div>
+    <p><strong>Utiliser obligatoirement <code>hotspot-editor.html</code></strong> (ouvert localement dans un navigateur) plutôt que de deviner les coordonnées à la main.</p>
+    <ol>
+      <li>Ouvrir <code>hotspot-editor.html</code> dans un navigateur.</li>
+      <li>Sélectionner la scène source dans le menu déroulant.</li>
+      <li>Cliquer sur l'endroit de l'image où le hotspot doit apparaître → les coordonnées 3D <code>{x, y, z}</code> sont capturées automatiquement.</li>
+      <li>Renseigner <code>type: 'transition'</code>, le <code>target</code> (ID de la scène cible), et un <code>label</code>.</li>
+      <li>Définir le <code>bearing</code> via le bouton <strong>« Calculer depuis position »</strong> (garde la cohérence avec la flèche 3D affichée à l'écran).</li>
+    </ol>
+
+    <div class="callout danger">
+      <strong>⚠️ Étape la plus souvent oubliée — calibrer <code>arrivalLon</code> :</strong>
+      Après avoir capturé les coordonnées, <strong>changer de scène dans l'éditeur</strong> pour aller sur la scène CIBLE, orienter la caméra (clic-glisser) vers la direction exacte que l'utilisateur doit voir en arrivant, puis cliquer <strong>« Capturer direction d'arrivée »</strong> → remplit <code>arrivalLon</code>. Si cette étape est sautée, l'utilisateur arrivera orienté de façon imprévisible (calcul de repli <code>movementAngle + 180</code>).
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">5</span> Copier dans <code>config.js</code></div>
+    <p>Cliquer <strong>« Copier hotspot complet »</strong> dans l'éditeur, puis coller le bloc dans le tableau <code>hotspots</code> de la scène source.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">6</span> Créer la liaison retour (aller-retour)</div>
+    <p>Le projet <strong>ne génère pas automatiquement la liaison retour</strong>. Pour que l'utilisateur puisse revenir de la scène cible à la scène source, répéter les étapes 4–5 depuis la scène cible.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">7</span> Rafraîchir</div>
+    <p>Aucune étape de build/compilation. Recharger la page dans le navigateur.</p>
+    <div class="callout warn">
+      <strong>Serveur local recommandé :</strong> les requêtes <code>fetch</code> et le chargement de textures peuvent échouer en <code>file://</code> direct selon le navigateur. Utiliser <code>npx serve .</code> ou <code>python -m http.server</code>.
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     4. RÉFÉRENCE CONFIG
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="config-ref">
+  <h2>4. Référence complète des propriétés</h2>
+
+  <h3>Propriétés d'une scène</h3>
+  <table>
+    <tr><th>Propriété</th><th>Type</th><th>Obligatoire en pratique</th><th>Effet réel</th></tr>
+    <tr><td><code>name</code></td><td>string</td><td>Oui</td><td>Affiché dans le menu latéral et les tooltips minimap</td></tr>
+    <tr><td><code>image</code></td><td>string</td><td>Oui</td><td>Chemin relatif vers la photo 360°</td></tr>
+    <tr><td><code>minimapX</code></td><td>number (0–100)</td><td><strong>Oui</strong> (silencieusement)</td><td>Position X du point sur la minimap. Si absent → <code>NaN</code> silencieux, le point et les lignes de connexion sont mal placés/cachés</td></tr>
+    <tr><td><code>minimapY</code></td><td>number (0–100)</td><td><strong>Oui</strong> (silencieusement)</td><td>Idem que minimapX</td></tr>
+    <tr><td><code>hotspots</code></td><td>array</td><td>Non (vide = scène isolée)</td><td>Liste des points de transition/info</td></tr>
+    <tr><td><code>defaultBearing</code></td><td>number</td><td>Non</td><td><strong>⚠️ CHAMP MORT</strong> — documenté dans les commentaires comme « direction de vue au chargement », mais <strong>aucun fichier .js ne le lit</strong>. Voir section Limites connues.</td></tr>
+  </table>
+
+  <h3>Propriétés d'un hotspot</h3>
+  <table>
+    <tr><th>Propriété</th><th>Type</th><th>Obligatoire</th><th>Effet réel</th></tr>
+    <tr><td><code>position</code></td><td>{x, y, z}</td><td>Oui</td><td>Coordonnées 3D capturées par l'éditeur. Pilote la direction physique du dolly ET la position de la flèche/aimantation au sol. <strong>Ne jamais éditer à la main.</strong></td></tr>
+    <tr><td><code>type</code></td><td>string</td><td>Oui</td><td><code>'transition'</code> = changement de scène. <code>'info'</code> = affiche une fiche (title/description/icon).</td></tr>
+    <tr><td><code>target</code></td><td>string</td><td>Si transition</td><td>ID de la scène cible. Aucune validation au chargement — une faute de frappe ne sera détectée qu'au clic.</td></tr>
+    <tr><td><code>bearing</code></td><td>number</td><td>Non (auto-calculé)</td><td><strong>Oriente uniquement la flèche 3D au sol</strong> entre deux hotspots (<code>bearingForHotspot()</code>). N'a <strong>aucun effet</strong> sur la trajectoire ou l'orientation pendant la transition, malgré ce que son nom et les commentaires suggèrent.</td></tr>
+    <tr><td><code>arrivalLon</code></td><td>number</td><td>Non (recommandé)</td><td>Valeur <strong>absolue</strong> définissant la direction de vue exacte une fois arrivé dans la scène cible. Si absent, un calcul de repli approximatif s'applique (<code>movementAngle + 180</code>).</td></tr>
+    <tr><td><code>arrivalLat</code></td><td>number</td><td>Non</td><td>Verticalité forcée après transition (défaut 0).</td></tr>
+    <tr><td><code>label</code></td><td>string</td><td>Non</td><td>Texte affiché dans le tooltip au survol de la flèche</td></tr>
+    <tr><td><code>icon</code></td><td>string</td><td>Si info</td><td>Icône pour les hotspots info (ex. <code>'💡'</code>)</td></tr>
+    <tr><td><code>title</code></td><td>string</td><td>Si info</td><td>Titre de la fiche info</td></tr>
+    <tr><td><code>description</code></td><td>string</td><td>Si info</td><td>Texte de la fiche info</td></tr>
+  </table>
+
+  <h3>Clarifications sur les bearings</h3>
+  <p>Le projet utilise le terme « bearing » à plusieurs endroits, ce qui a causé des confusions documentées. Réel état du code :</p>
+  <ul>
+    <li><code>defaultBearing</code> (scène) → <strong>lu par rien</strong>. Champ mort.</li>
+    <li><code>bearing</code> (hotspot) → lu par <code>bearingForHotspot()</code> dans <code>hotspots.js</code> et <code>transition.js</code>. Sert à orienter la flèche 3D au sol. N'influence <strong>ni</strong> la trajectoire du dolly, <strong>ni</strong> l'orientation de vue à l'arrivée.</li>
+    <li><code>arrivalLon</code> (hotspot) → lu dans <code>triggerGSVTransition()</code> (<code>transition.js</code>). C'est <strong>la</strong> valeur qui détermine la direction de vue à l'arrivée.</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     5. TRANSITION GSV
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="transition">
+  <h2>5. Comportement de la transition</h2>
+  <p>La séquence réelle telle qu'implémentée dans <code>transition.js</code> — durée totale <strong>900ms</strong>.</p>
+
+  <h3>Les 3 couches simultanées</h3>
+  <ol>
+    <li><strong>Dolly-in 3D</strong> : GSAP anime <code>camera.position</code> de 80 unités en ligne droite vers le hotspot cliqué (vecteur normalisé depuis l'origine). Easing <code>power2.inOut</code>.</li>
+    <li><strong>Radial Stretch (shader GLSL)</strong> : appliqué sur l'ANCienne sphère. Le vertex shader étire les coordonnées NDC en fonction du rayon (centre fixe, périphérie étirée). Le fragment shader applique un flou directionnel 5-échantillons. <code>uStretch</code> et <code>uBlur</code> suivent une courbe en cloche (0 → max → 0).</li>
+    <li><strong>Bascule nette (pas de crossfade progressif)</strong> : la nouvelle sphère reste invisible, puis apparaît en <strong>une seule frame</strong> à exactement 50% de la timeline (450ms), au pic du flou. Le changement est invisible à l'œil car l'ancienne image est alors masquée par le flou maximal.</li>
+  </ol>
+
+  <h3>Séquence temporelle</h3>
+  <pre><code>0.0s ─────────────────────────────────────────────── 0.9s
+  │                                               │
+  ├─ Dolly-in : camera.position ── power2.inOut ──→│
+  │                                               │
+  ├─ uStretch : 0 → 0.4 (0–450ms) → 0 (450–900ms)│
+  │                                               │
+  ├─ uBlur : 0 → 1.0 (0–450ms) → 0 (450–900ms)   │
+  │                                               │
+  ├─ uOpacity sphère A : 1 → 0.5 → 0              │
+  │                                               │
+  ├─ ⚡ BASCULE NETTE à 450ms                     │
+  │     → nextSphere.visible = true               │
+  │     → tourState.lon = arrivalLon               │
+  │     → tourState.lat = arrivalLat               │
+  │                                               │
+  └─ finalize() à 900ms                           │
+       → dispose ancienne sphère                  │
+       → reset camera.position = (0,0,0.001)      │
+       → mise à jour UI (menu, minimap, hotspots) │
+       → mise à jour dynamique du bearing retour  │</code></pre>
+
+  <div class="callout ok">
+    <strong>Pourquoi une bascule nette plutôt qu'un fondu progressif ?</strong> Un fondu progressif entre les deux images révélerait brièvement l'orientation « non corrigée » de la photo cible (orientation native de la GoPro) avant que <code>arrivalLon</code> ne soit appliqué. La bascule nette, masquée par le flou radial, évite ce défaut visuel.
+  </div>
+
+  <h3>Mise à jour dynamique du bearing retour</h3>
+  <p>Après chaque transition, <code>finalize()</code> recalcule le <code>bearing</code> du hotspot inverse (scène cible → scène source) via <code>getReverseHotspotBearing()</code>. Cela garantit que la flèche au sol pointe correctement lors du trajet retour.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     6. VR / WebXR
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="vr">
+  <h2>6. Mode VR / WebXR</h2>
+
+  <h3>API utilisée</h3>
+  <p>Le code utilise l'API <strong>WebXR standard</strong> (<code>navigator.xr.requestSession('immersive-vr', ...)</code>), <strong>pas une API propriétaire Meta</strong>. Devrait fonctionner sur tout casque WebXR compatible. Testé et calibré sur <strong>Meta Quest</strong>.</p>
+
+  <h3>HUD minimaliste</h3>
+  <p>Un seul élément dans la scène VR : un bouton <strong>« Quitter VR »</strong> positionné dans le monde (pas attaché à la caméra — évite les bugs de matrice WebXR). Repositionné chaque frame devant l'utilisateur en <strong>yaw-only</strong> (Euler <code>YXZ</code>, pitch et roll annulés).</p>
+
+  <h3>Contrôles VR</h3>
+  <table>
+    <tr><th>Contrôle</th><th>Action</th><th>Fichier</th></tr>
+    <tr><td>Joystick gauche/droite</td><td>Rotation continue</td><td><code>xr-controls.js</code></td></tr>
+    <tr><td>Joystick haut/bas</td><td>Marche one-shot + cooldown 800ms</td><td><code>xr-controls.js</code></td></tr>
+    <tr><td>Gâchette (trigger)</td><td>Sélection hotspot actif</td><td><code>hotspots.js → handleXRSelect()</code></td></tr>
+    <tr><td>Squeeze (pression latérale)</td><td>Retour en arrière</td><td><code>xr-controls.js</code></td></tr>
+    <tr><td>Bouton A/X (<code>event.button === 2</code>)</td><td>Ouvrir le menu latéral</td><td><code>xr-controls.js</code></td></tr>
+  </table>
+
+  <h3>Mapping bouton A/X — point de couplage matériel</h3>
+  <p>Le bouton A/X est détecté via <code>event.button === 2</code> dans <code>xr-controls.js</code>. Cela suppose l'ordre de boutons du profil <code>xr-standard</code> tel qu'exposé par les contrôleurs Quest Touch. <strong>Peut nécessiter un ajustement d'index sur un autre casque.</strong></p>
+
+  <div class="callout warn">
+    <strong>Déboggage mapping boutons :</strong> pour inspecter l'ordre réel des boutons sur un casque donné, ouvrir la console du navigateur pendant une session XR et exécuter :
+    <pre style="margin-top:8px"><code><span style="color:#6b7280">// Dans la console, pendant une session VR :</span>
+tourState.xrControllers.forEach((c, i) =&gt; {
+  c.gamepad.buttons.forEach((b, j) =&gt; {
+    <span style="color:#93c5fd">console</span>.log(<span style="color:#86efac">`controller[${i}].button[${j}] = ${b.pressed}`</span>);
+  });
+});</code></pre>
+  </div>
+
+  <h3>Sélection en VR — <code>handleXRSelect()</code></h3>
+  <p>Dans <code>hotspots.js</code>. La gâchette déclenche un raycast depuis la manette. L'ordre de test est :</p>
+  <ol>
+    <li><strong>Bouton Quitter VR</strong> (si visible et touché à moins de 3m) → <code>session.end()</code></li>
+    <li><strong>Meshes de la flèche au sol</strong> → transition vers la scène cible</li>
+    <li><strong>Fallback</strong> : si le hotspot actif est à moins de 50 unités, l'utiliser quand même</li>
+  </ol>
+
+  <h3>Visée poignet (pointer-based)</h3>
+  <p>Contrairement au gaze-based (regard de la caméra), ce projet utilise la <strong>visée poignet</strong> : un rayon laser bleu est projeté depuis la manette active. La flèche 3D au sol suit ce rayon sur le plan <code>Y = -2</code>. Guards anti-division-par-zéro quand la manette est parallèle au sol.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     7. LIMITES CONNUES
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="limits">
+  <h2>7. Limites connues et pièges à éviter</h2>
+
+  <div class="callout danger">
+    <strong>⚠️ <code>defaultBearing</code> est un champ mort.</strong> Documenté dans les commentaires de <code>config.js</code> comme « direction de vue au chargement », mais <strong>lu par aucun fichier .js du projet</strong> à l'heure actuelle. Ne perdez pas de temps à le calibrer — il n'a aucun effet. Le code de <code>main.js</code> vérifie bien <code>sceneConfig.defaultLon</code> (notez le suffixe <code>Lon</code>, pas <code>Bearing</code>), mais cette propriété <strong>n'existe dans aucune scène</code>, donc elle non plus n'est jamais utilisée.
+  </div>
+
+  <h3>Scène par défaut codée en dur : <code>'12'</code></h3>
+  <p>L'ID <code>'12'</code> est utilisé comme scène de secours dans <code>state.js</code> (<code>currentScene: '12'</code>) et dans <code>main.js</code> (<code>getStartParams()</code> → fallback si l'URL ne précise pas de scène valide). Si la scène <code>'12'</code> est un jour supprimée ou renommée, il faut <strong>modifier ces deux fichiers</strong>, sinon le chargement par défaut échoue silencieusement.</p>
+
+  <h3><code>minimapX</code>/<code>minimapY</code> manquants → NaN silencieux</h3>
+  <p>Dans <code>ui.js</code>, le calcul <code>scene.minimapY * 1.6</code> produit <code>NaN</code> si la propriété est absente. <strong>Pas d'erreur en console</strong> — juste un point et des lignes de connexion manquants/mal placés sur la minimap. Scènes actuellement concernées : <code>'21'</code>, <code>'22'</code>, <code>'23'</code>, <code>'24'</code>, <code>'25'</code>, <code>'26'</code>, <code>'27'</code>, <code>'28'</code>, <code>'29'</code>, <code>'30'</code>, <code>'31'</code>, <code>'32'</code>, <code>'33'</code>, <code>'34'</code>, <code>'35'</code> (elles n'ont pas de <code>defaultBearing</code>, mais elles AUSSI n'ont parfois pas de minimapX/Y — vérifier chaque scène au cas par cas).</p>
+
+  <h3>Pas de validation au chargement</h3>
+  <p>Une faute de frappe dans un <code>target</code> (ID de scène inexistant) ne lève <strong>aucune erreur à la configuration</strong>. Le bug n'apparaît qu'au clic sur ce hotspot précis dans la visite.</p>
+
+  <h3>Aucune limite de nombre de scènes/hotspots</h3>
+  <p>Le projet actuel a 24 scènes, mais <strong>rien dans le code ne plafonne ce nombre</strong>. Le vrai facteur limitant en pratique est le temps de préchargement (toutes les textures des scènes liées sont préchargées) et la taille totale des assets servis.</p>
+
+  <h3>Type <code>info</code> non encore utilisé dans les données</h3>
+  <p>Tous les hotspots du <code>config.js</code> actuels sont de type <code>transition</code>. Le support <code>info</code> (fiche descriptive) est bien implémenté dans le code (<code>hotspots.js</code> crée un bouton HTML, <code>ui.js</code> affiche une carte), mais aucune scène ne l'utilise encore.</p>
+
+  <h3>Rendering : sphère inversée, pas de nuage de points</h3>
+  <p>Les textures sont projetées sur une sphère Three.js avec <code>geo.scale(-1, 1, 1)</code>. C'est simple et performant, mais en VR les bords de la texture peuvent montrer une légère distorsion aux pôles. Le cahier des charges technique prévoit à terme un nuage de points stéréoscopique.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     8. FAQ / DÉPANNAGE
+     ═══════════════════════════════════════════════════════════════ -->
+<section id="faq">
+  <h2>8. FAQ / dépannage rapide</h2>
+
+  <div class="faq-item">
+    <div class="faq-q">J'ai ajouté une scène et la minimap est cassée pour elle</div>
+    <div class="faq-a">Vérifier que <code>minimapX</code> et <code>minimapY</code> sont bien définis (nombres entre 0 et 100). Leur absence produit un <code>NaN</code> silencieux dans le calcul <code>scene.minimapY * 1.6</code> → le point et les lignes de connexion ne s'affichent pas correctement.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Le hotspot ne m'amène pas où je veux en arrivant</div>
+    <div class="faq-a"><code>arrivalLon</code> non calibré ou mal calibré. Ouvrir <code>hotspot-editor.html</code>, naviguer jusqu'à la scène CIBLE (pas la source), orienter la caméra vers la direction d'arrivée souhaitée, cliquer <strong>« Capturer direction d'arrivée »</strong>. Ce n'est pas l'étape « Calculer depuis position » — c'est le bouton séparé tout en bas.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">J'ai changé <code>defaultBearing</code> et rien ne se passe</div>
+    <div class="faq-a"><code>defaultBearing</code> est un <strong>champ mort</strong> — lu par aucun fichier .js. Il est safe de le supprimer ou de l'ignorer. Pour contrôler la direction à l'arrivée, utiliser <code>arrivalLon</code> sur le hotspot.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">La flèche au sol ne pointe pas dans la bonne direction</div>
+    <div class="faq-a">La flèche au sol (<code>bearingForHotspot()</code>) est pilotée par le champ <code>bearing</code> du hotspot, PAS par <code>arrivalLon</code>. Ce sont deux choses indépendantes. Pour recalibrer : ouvrir <code>hotspot-editor.html</code>, sélectionner « Calculer depuis position » pour aligner la flèche avec l'emplacement physique du hotspot au sol.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Le hotspot existe dans config.js mais je ne peux pas cliquer dessus en VR</div>
+    <div class="faq-a">Vérifier que le mesh au sol a bien <code>userData.hotspot = nearest</code> (dans <code>hotspots.js → updateGroundHotspots()</code>). En VR, le rayon part de la manette active — pointer directement la flèche au sol. Si <code>getActiveController()</code> retourne null (pas de manette détectée), la flèche reste invisible.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">La transition est saccadée / la nouvelle scène met du temps à apparaître</div>
+    <div class="faq-a">La bascule nette se fait à 450ms, mais <code>finalize()</code> attend que la texture soit chargée (polling toutes les 32ms). Si la texture cible n'est pas en cache, le chargement peut ajouter un délai. Vérifier que le chemin <code>image</code> est correct et que la casse correspond (le chargeur essaie 4 variantes automatiquement).</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Le joystick VR ne déclenche pas de transition</div>
+    <div class="faq-a">Dans <code>xr-controls.js</code> : le joystick axe Y doit dépasser le deadzone (±0.3) ET respecter le cooldown de 800ms. Le trigger se fait par <code>triggerHotspotInDirection()</code> qui cherche le hotspot le plus proche dans la direction du regard (±45°). Vérifier que des hotspots de transition existent dans la scène courante.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Comment partager un lien direct vers une vue précise ?</div>
+    <div class="faq-a">Le bouton « Partager » dans le menu copie une URL avec paramètres <code>?scene=ID&lon=DEG&lat=DEG</code>. Vous pouvez aussi construire manuellement : <code>index.html?scene=13&lon=180&lat=0</code>. Au chargement, <code>main.js → getStartParams()</code> lit ces paramètres et les applique.</div>
+  </div>
+
+  <div class="faq-item">
+    <div class="faq-q">Le projet ne charge pas en double-cliquant index.html (file://)</div>
+    <div class="faq-a">Normal — les textures sont chargées via XHR/fetch, ce qui est bloqué en <code>file://</code> par la plupart des navigateurs. Lancer un serveur statique local : <code>npx serve .</code> ou <code>python -m http.server 8080</code>.</div>
+  </div>
+</section>
+
+</main>
+
+<script>
+  // ── Navigation active state ───────────────────────────────────────
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('#nav a');
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => obs.observe(s));
+
+  // ── Copy buttons on code blocks ───────────────────────────────────
+  document.querySelectorAll('pre').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copier';
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(pre.textContent.replace('Copier','').trim()).then(() => {
+        btn.textContent = '✓ Copié';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copier'; btn.classList.remove('copied'); }, 1800);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // ── FAQ toggle ────────────────────────────────────────────────────
+  document.querySelectorAll('.faq-q').forEach(q => {
+    q.addEventListener('click', () => q.parentElement.classList.toggle('open'));
+  });
+</script>
+
+</body>
+</html>

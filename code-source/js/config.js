@@ -117,6 +117,7 @@
                 defaultBearing: 177,
                 minimapX: 65, minimapY: 70,
                 hotspots: [
+                    { position: { x: -497, y: 40, z: 26 }, type: 'info' },
                     { position: { x: 243, y: -177, z: 399 }, type: 'transition', target: '12', bearing: 158, arrivalLon: 0, arrivalLat: 0, label: 'Retour Entrée' },
                     { position: { x: -298, y: -154, z: 370 }, type: 'transition', target: '17', bearing: 312, arrivalLon: 214, arrivalLat: 0, label: 'Salle collaborative' },
                     { position: { x: 450, y: -216, z: 18 }, type: 'transition', target: '13', bearing: 180, arrivalLon: 284, arrivalLat: 0, label: "Retour salle d'attente" },

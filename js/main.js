@@ -357,6 +357,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
+        renderer.xr.setReferenceSpaceType('viewer');
         // Correction luminosité — les photos prises en intérieur apparaissent
         // sombres sans ces deux paramètres. outputEncoding sRGB = couleurs fidèles.
         // toneMapping LinearToneMapping + exposure = contrôle de la luminosité globale.
