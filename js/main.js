@@ -4,6 +4,7 @@
     var textureLoader;
     var textureCache = {};
     var xrBaseReferenceSpace = null;
+    var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
 
     function vectorFromConfig(position) {
         return new THREE.Vector3(position.x, position.y, position.z);
@@ -53,6 +54,11 @@
                     function (texture) {
                         texture.minFilter = THREE.LinearFilter;
                         texture.magFilter = THREE.LinearFilter;
+                        // [PERF] mipmaps jamais utilisés avec LinearFilter (non-mipmap) —
+                        // les désactiver évite au GPU de générer une chaîne de mipmaps
+                        // complète pour rien à chaque upload de panorama haute résolution.
+                        // Gain direct sur le temps de chargement, surtout à l'entrée en VR.
+                        texture.generateMipmaps = false;
                         // encoding doit correspondre à renderer.outputEncoding = sRGBEncoding
                         texture.encoding = THREE.sRGBEncoding;
                         texture.needsUpdate = true; // [CORRECTION GSV] force le upload GPU
@@ -309,11 +315,11 @@
 
         var pos = viewerPose.transform.position;
 
-        var offsetTransform = new XRRigidTransform(
-            { x: pos.x, y: pos.y, z: pos.z },
-            { x: 0, y: 0, z: 0, w: 1 }
-        );
-
+        // [PERF] XRRigidTransform doit être recréé (objet immuable côté
+        // navigateur), mais on évite au moins la création d'un objet
+        // littéral {x,y,z} intermédiaire séparé — impact mineur mais
+        // chaque allocation compte à 72-90 frames/seconde sur Quest.
+        var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
         var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
         renderer.xr.setReferenceSpace(offsetReferenceSpace);
     }
