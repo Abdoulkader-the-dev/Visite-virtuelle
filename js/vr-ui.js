@@ -23,9 +23,16 @@
 
     var vrUiGroup = null;
     var exitButton = null;
+    var vrInfoPanel = null;
+    var vrInfoCanvas = null;
+    var vrInfoTexture = null;
+    var vrInfoMaterial = null;
+    var vrInfoMesh = null;
+    var vrInfoVisible = false;
+    var currentHotspot = null;
+    var textureLoader = null;
     var hudEuler = new THREE.Euler();
     var hudForward = new THREE.Vector3();
-    var textureLoader = null;
 
     // -------------------------------------------------------------------------
     //  buildVRUI() — Crée le HUD dans la scène mondiale (pas sur la caméra)
@@ -73,9 +80,6 @@
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
 
-        // Exposer le bouton globalement pour handleXRSelect()
-        window.vrExitButton = exitButton;
-
         window.tourState.scene.add(vrUiGroup);
     }
 
@@ -97,6 +101,7 @@
     function initVRUI() {
         buildVRUI();
         hideVRUI();
+        buildVRInfoPanel();
     }
 
     // -------------------------------------------------------------------------
@@ -111,20 +116,22 @@
             session.end().then(function () {
                 window.tourState.isXRActive = false;
                 hideVRUI();
+                hideVRInfoPanel();
             }).catch(function (err) {
                 console.error('[VR] Erreur fin de session:', err);
                 window.tourState.isXRActive = false;
                 hideVRUI();
+                hideVRInfoPanel();
             });
         } else {
             window.tourState.isXRActive = false;
             hideVRUI();
+            hideVRInfoPanel();
         }
     }
 
     // -------------------------------------------------------------------------
     //  updateVRUI() — Repositionne le HUD devant la caméra chaque frame
-    //  Copie position caméra + yaw seulement (pas de pitch/roll).
     // -------------------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -147,6 +154,223 @@
         vrUiGroup.lookAt(camera.position);
         vrUiGroup.rotateY(Math.PI);
         vrUiGroup.visible = true;
+
+        // Update VR info panel if visible
+        if (vrInfoVisible && vrInfoMesh) {
+            updateVRInfoPanelPosition();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    //  buildVRInfoPanel() — Crée le panneau d'information VR
+    // -------------------------------------------------------------------------
+    function buildVRInfoPanel() {
+        vrInfoCanvas = document.createElement('canvas');
+        vrInfoCanvas.width = 768;
+        vrInfoCanvas.height = 384;
+
+        vrInfoTexture = new THREE.CanvasTexture(vrInfoCanvas);
+        vrInfoMaterial = new THREE.MeshBasicMaterial({
+            map: vrInfoTexture,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            opacity: 0
+        });
+
+        vrInfoMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), vrInfoMaterial);
+        vrInfoMesh.renderOrder = 5;
+        vrInfoMesh.visible = false;
+        window.tourState.scene.add(vrInfoMesh);
+
+        vrInfoPanel = {
+            mesh: vrInfoMesh,
+            canvas: vrInfoCanvas,
+            texture: vrInfoTexture,
+            material: vrInfoMaterial
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    //  showVRInfoPanel() — Affiche le panneau d'information VR
+    // -------------------------------------------------------------------------
+    function showVRInfoPanel(hotspot) {
+        if (!vrInfoPanel || !window.tourState.isXRActive) {
+            return;
+        }
+
+        currentHotspot = hotspot;
+        var canvas = vrInfoPanel.canvas;
+        var ctx = canvas.getContext('2d');
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
+        ctx.fill();
+
+        // Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
+        ctx.stroke();
+
+        // Icon
+        ctx.fillStyle = '#3B82F6';
+        ctx.beginPath();
+        ctx.arc(72, 72, 36, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '42px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(hotspot.icon || 'i', 72, 72);
+
+        // Title
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 38px system-ui';
+        ctx.fillText(hotspot.title || 'Information', 130, 68);
+
+        // Description
+        ctx.font = '28px system-ui';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        var words = (hotspot.description || '').split(' ');
+        var line = '';
+        var y = 140;
+        for (var i = 0; i < words.length; i += 1) {
+            var test = line + words[i] + ' ';
+            if (ctx.measureText(test).width > 560 && i > 0) {
+                ctx.fillText(line, 40, y);
+                line = words[i] + ' ';
+                y += 44;
+            } else {
+                line = test;
+            }
+        }
+        ctx.fillText(line, 40, y);
+
+        // Close button
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(canvas.width - 60, 20, 40, 40);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('✕', canvas.width - 40, 42);
+
+        vrInfoPanel.texture.needsUpdate = true;
+        vrInfoPanel.material.opacity = 1;
+        vrInfoPanel.mesh.visible = true;
+        vrInfoVisible = true;
+
+        updateVRInfoPanelPosition();
+    }
+
+    // -------------------------------------------------------------------------
+    //  hideVRInfoPanel() — Cache le panneau d'information VR
+    // -------------------------------------------------------------------------
+    function hideVRInfoPanel() {
+        if (vrInfoPanel) {
+            vrInfoPanel.material.opacity = 0;
+            vrInfoPanel.mesh.visible = false;
+        }
+        vrInfoVisible = false;
+        currentHotspot = null;
+    }
+
+    // -------------------------------------------------------------------------
+    //  updateVRInfoPanelPosition() — Positionne le panneau d'information VR
+    // -------------------------------------------------------------------------
+    function updateVRInfoPanelPosition() {
+        if (!vrInfoVisible || !vrInfoPanel || !window.tourState.isXRActive) {
+            return;
+        }
+
+        var camera = window.tourState.camera;
+        var position = new THREE.Vector3();
+        camera.getWorldPosition(position);
+
+        var forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+
+        var panelPosition = position.clone().add(forward.clone().multiplyScalar(2.5));
+        panelPosition.y += 0.2;
+
+        vrInfoPanel.mesh.position.copy(panelPosition);
+        vrInfoPanel.mesh.lookAt(camera.position);
+        vrInfoPanel.mesh.rotateY(Math.PI);
+    }
+
+    // -------------------------------------------------------------------------
+    //  updateVRInfoPanelFrame() — Met à jour le frame du panneau VR
+    // -------------------------------------------------------------------------
+    function updateVRInfoPanelFrame() {
+        // This is called from the render loop to keep the panel updated
+        if (vrInfoVisible && vrInfoPanel) {
+            updateVRInfoPanelPosition();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    //  setupVRButton() — Configure le bouton VR
+    // -------------------------------------------------------------------------
+    function setupVRButton() {
+        var vrButton = document.getElementById('vr-btn');
+        if (!vrButton) { return; }
+
+        // Remove existing listeners to avoid duplicates
+        var newButton = vrButton.cloneNode(true);
+        vrButton.parentNode.replaceChild(newButton, vrButton);
+        vrButton = newButton;
+
+        vrButton.addEventListener('click', function () {
+            if (window.tourState.isXRActive) {
+                doExitVR();
+            } else {
+                enterVR();
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    //  enterVR() — Entre en mode VR
+    // -------------------------------------------------------------------------
+    function enterVR() {
+        var renderer = window.tourState.renderer;
+        if (!renderer || !renderer.xr) {
+            console.error('[VR] Renderer XR non disponible');
+            return;
+        }
+
+        if (!navigator.xr) {
+            console.error('[VR] WebXR non supporté');
+            return;
+        }
+
+        navigator.xr.isSessionSupported('immersive-vr').then(function (supported) {
+            if (!supported) {
+                console.error('[VR] Mode VR non supporté sur ce périphérique');
+                return;
+            }
+
+            renderer.xr.setSession(null);
+
+            navigator.xr.requestSession('immersive-vr', {
+                requiredFeatures: ['local-floor', 'hand-tracking']
+            }).then(function (session) {
+                renderer.xr.setSession(session);
+                showVRUI();
+            }).catch(function (err) {
+                console.error('[VR] Erreur démarrage session:', err);
+            });
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -169,299 +393,111 @@
             var intersects = raycaster.intersectObject(exitButton);
             if (intersects.length > 0) {
                 doExitVR();
-            }
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    //  updateAutoRotation() — Gère la rotation automatique
-    // -------------------------------------------------------------------------
-    function updateAutoRotation() {
-        // Désactiver l'auto-rotation en mode VR
-        if (window.tourState.isXRActive) {
-            window.tourState.autoRotating = false;
-            return;
-        }
-
-        if (!window.tourState.isDragging) {
-            window.tourState.lon += 0.03;
-            window.tourState.autoRotating = true;
-        } else {
-            window.tourState.autoRotating = false;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    //  updateCameraLookAt() — Met à jour la caméra
-    // -------------------------------------------------------------------------
-    function updateCameraLookAt() {
-        var phi = (90 - window.tourState.lat) * Math.PI / 180;
-        var theta = window.tourState.lon * Math.PI / 180;
-
-        window.tourState.camera.lookAt(
-            500 * Math.sin(phi) * Math.cos(theta),
-            500 * Math.cos(phi),
-            500 * Math.sin(phi) * Math.sin(theta)
-        );
-
-        if (window.tourState.camera.fov !== window.tourState.fov) {
-            window.tourState.camera.fov = window.tourState.fov;
-            window.tourState.camera.updateProjectionMatrix();
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    //  createSphere() — Crée la sphère de la visite
-    // -------------------------------------------------------------------------
-    function createSphere() {
-        var geometry = new THREE.SphereGeometry(500, 64, 64);
-        var material = new THREE.MeshBasicMaterial({
-            side: THREE.BackSide,
-            transparent: true,
-            opacity: 1
-        });
-        return new THREE.Mesh(geometry, material);
-    }
-
-    // -------------------------------------------------------------------------
-    //  normalizeConfigPositions() — Normalise les positions des scènes
-    // -------------------------------------------------------------------------
-    function normalizeConfigPositions() {
-        if (!window.TOUR_CONFIG || !window.TOUR_CONFIG.scenes) return;
-
-        var scenes = window.TOUR_CONFIG.scenes;
-        for (var key in scenes) {
-            if (scenes.hasOwnProperty(key)) {
-                var scene = scenes[key];
-                if (scene.lon === undefined) scene.lon = 0;
-                if (scene.lat === undefined) scene.lat = 0;
-                if (scene.fov === undefined) scene.fov = 75;
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    //  loadScene() — Charge une scène
-    // -------------------------------------------------------------------------
-    function loadScene(sceneId, options) {
-        return new Promise(function (resolve, reject) {
-            var scenes = window.TOUR_CONFIG.scenes;
-            var sceneData = scenes[sceneId];
-            if (!sceneData) {
-                reject(new Error('Scene not found: ' + sceneId));
                 return;
             }
 
-            window.tourState.currentScene = sceneId;
-            window.tourState.lon = sceneData.lon || 0;
-            window.tourState.lat = sceneData.lat || 0;
-            window.tourState.fov = sceneData.fov || 75;
-
-            if (sceneData.image) {
-                textureLoader.load(sceneData.image, function (texture) {
-                    window.tourState.sphere.material.map = texture;
-                    window.tourState.sphere.material.needsUpdate = true;
-
-                    if (options && options.isInitialLoad) {
-                        updateCameraLookAt();
+            // Check for info panel click
+            if (vrInfoVisible && vrInfoPanel) {
+                var panelIntersects = raycaster.intersectObject(vrInfoPanel.mesh);
+                if (panelIntersects.length > 0) {
+                    // Check if close button was clicked
+                    var uv = panelIntersects[0].uv;
+                    if (uv) {
+                        var canvas = vrInfoPanel.canvas;
+                        var x = uv.x * canvas.width;
+                        var y = (1 - uv.y) * canvas.height;
+                        // Close button area (top-right corner)
+                        if (x > canvas.width - 60 && x < canvas.width - 20 &&
+                            y > 20 && y < 60) {
+                            hideVRInfoPanel();
+                        }
                     }
-                    resolve();
-                }, undefined, function (err) {
-                    reject(err);
-                });
+                }
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    //  roundedCardCanvas() — Crée un canvas pour les cartes d'information VR
+    // -------------------------------------------------------------------------
+    function roundedCardCanvas(hotspot) {
+        var canvas = document.createElement('canvas');
+        canvas.width = 768;
+        canvas.height = 384;
+        var ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = 'rgba(0,0,0,0.82)';
+        ctx.beginPath();
+        ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
+        ctx.stroke();
+
+        ctx.fillStyle = '#3B82F6';
+        ctx.beginPath();
+        ctx.arc(72, 78, 42, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '48px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(hotspot.icon || 'i', 72, 78);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 42px system-ui';
+        ctx.fillText(hotspot.title || 'Information', 140, 72);
+
+        ctx.font = '28px system-ui';
+        ctx.fillStyle = 'rgba(255,255,255,0.82)';
+        var words = (hotspot.description || '').split(' ');
+        var line = '';
+        var y = 150;
+        for (var i = 0; i < words.length; i += 1) {
+            var test = line + words[i] + ' ';
+            if (ctx.measureText(test).width > 560 && i > 0) {
+                ctx.fillText(line, 58, y);
+                line = words[i] + ' ';
+                y += 40;
             } else {
-                resolve();
-            }
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    //  preloadAllScenes() — Précharge toutes les scènes
-    // -------------------------------------------------------------------------
-    function preloadAllScenes() {
-        var scenes = window.TOUR_CONFIG.scenes;
-        for (var key in scenes) {
-            if (scenes.hasOwnProperty(key) && scenes[key].image) {
-                textureLoader.load(scenes[key].image, function () { }, undefined, function () { });
+                line = test;
             }
         }
-    }
+        ctx.fillText(line, 58, y);
 
-    // -------------------------------------------------------------------------
-    //  renderFrame() — Boucle de rendu
-    // -------------------------------------------------------------------------
-    function renderFrame(timestamp, frame) {
-        updateAutoRotation();
-        updateCameraLookAt();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(676, 22, 58, 58);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 34px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('×', 705, 53);
 
-        if (window.updateHotspots) {
-            window.updateHotspots();
-        }
-        if (window.updateMinimapArrow) {
-            window.updateMinimapArrow();
-        }
-        if (window.updateCompass) {
-            window.updateCompass();
-        }
-
-        updateVRUI();
-
-        window.tourState.renderer.render(window.tourState.scene, window.tourState.camera);
-    }
-
-    // -------------------------------------------------------------------------
-    //  onResize() — Gère le redimensionnement
-    // -------------------------------------------------------------------------
-    function onResize() {
-        var camera = window.tourState.camera;
-        var renderer = window.tourState.renderer;
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
-    }
-
-    // -------------------------------------------------------------------------
-    //  getStartParams() — Récupère les paramètres de démarrage
-    // -------------------------------------------------------------------------
-    function getStartParams() {
-        var params = new URLSearchParams(window.location.search);
-        var sceneId = params.get('scene') || '12';
-        var lon = parseFloat(params.get('lon'));
-        var lat = parseFloat(params.get('lat'));
-
-        if (!window.TOUR_CONFIG.scenes[sceneId]) {
-            sceneId = '12';
-        }
-
-        return {
-            scene: sceneId,
-            lon: isNaN(lon) ? 0 : lon,
-            lat: isNaN(lat) ? 0 : Math.max(-85, Math.min(85, lat))
-        };
-    }
-
-    // -------------------------------------------------------------------------
-    //  init() — Initialisation principale
-    // -------------------------------------------------------------------------
-    function init() {
-        // Vérifier que TOUR_CONFIG existe
-        if (!window.TOUR_CONFIG) {
-            console.error('[VR] TOUR_CONFIG manquant');
-            return;
-        }
-
-        normalizeConfigPositions();
-
-        var canvas = document.getElementById('tour-canvas');
-        if (!canvas) {
-            console.error('[VR] Canvas #tour-canvas introuvable');
-            return;
-        }
-
-        var scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000);
-
-        var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 0.001);
-
-        var renderer = new THREE.WebGLRenderer({
-            canvas: canvas,
-            antialias: false,
-            powerPreference: 'high-performance'
-        });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
-        renderer.xr.enabled = true;
-        renderer.outputEncoding = THREE.sRGBEncoding;
-        renderer.toneMapping = THREE.LinearToneMapping;
-        renderer.toneMappingExposure = 1.4;
-
-        // Track XR session state
-        renderer.xr.addEventListener('sessionstart', function () {
-            window.tourState.isXRActive = true;
-            showVRUI();
-            console.log('[VR] Session started');
-        });
-
-        renderer.xr.addEventListener('sessionend', function () {
-            window.tourState.isXRActive = false;
-            hideVRUI();
-            console.log('[VR] Session ended');
-        });
-
-        var sphere = createSphere();
-        scene.add(sphere);
-
-        var sphere2 = createSphere();
-        sphere2.material.opacity = 0;
-        sphere2.material.depthWrite = false;
-        sphere2.scale.set(0.99, 0.99, 0.99);
-        sphere2.visible = false;
-        scene.add(sphere2);
-
-        textureLoader = new THREE.TextureLoader();
-        textureLoader.setCrossOrigin('anonymous');
-
-        // Initialiser tourState
-        window.tourState = window.tourState || {};
-        window.tourState.camera = camera;
-        window.tourState.renderer = renderer;
-        window.tourState.scene = scene;
-        window.tourState.sphere = sphere;
-        window.tourState.sphere2 = sphere2;
-        window.tourState.isXRActive = false;
-        window.tourState.isDragging = false;
-        window.tourState.autoRotating = true;
-        window.tourState.lon = 0;
-        window.tourState.lat = 0;
-        window.tourState.fov = 75;
-        window.tourState.currentScene = null;
-
-        // Initialiser les modules
-        if (window.initControls) {
-            window.initControls();
-        }
-        if (window.initUI) {
-            window.initUI();
-        }
-
-        initVRUI();
-        setupXRControllers();
-
-        window.addEventListener('resize', onResize);
-
-        var startParams = getStartParams();
-
-        loadScene(startParams.scene, { isInitialLoad: true }).then(function () {
-            if (startParams.lon !== 0) {
-                window.tourState.lon = startParams.lon;
-            }
-            window.tourState.lat = startParams.lat;
-            preloadAllScenes();
-        }).catch(function (err) {
-            console.error('[VR] Erreur chargement scène:', err);
-        });
-
-        renderer.setAnimationLoop(renderFrame);
+        return canvas;
     }
 
     // Exposer les fonctions globalement
-    window.loadScene = loadScene;
-    window.preloadAllScenes = preloadAllScenes;
-    window.updateCameraLookAt = updateCameraLookAt;
-    window.createSphere = createSphere;
+    window.loadScene = window.loadScene || function () { console.warn('loadScene not defined'); };
+    window.preloadAllScenes = window.preloadAllScenes || function () { };
+    window.updateCameraLookAt = window.updateCameraLookAt || function () { };
+    window.createSphere = window.createSphere || function () { };
     window.updateVRUI = updateVRUI;
     window.initVRUI = initVRUI;
     window.buildVRUI = buildVRUI;
     window.showVRUI = showVRUI;
     window.hideVRUI = hideVRUI;
     window.doExitVR = doExitVR;
+    window.showVRInfoPanel = showVRInfoPanel;
+    window.hideVRInfoPanel = hideVRInfoPanel;
+    window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
+    window.setupVRButton = setupVRButton;
+    window.exitVR = doExitVR;
+    window.enterVR = enterVR;
+    window.setupXRControllers = setupXRControllers;
+    window.roundedCardCanvas = roundedCardCanvas;
 
-    // Démarrer
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
 })();

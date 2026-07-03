@@ -2,7 +2,6 @@
     'use strict';
 
     var minimapArrow = null;
-    // VR-related variables removed as VR functionality is removed
 
     function sceneIds() {
         return Object.keys(window.TOUR_CONFIG.scenes);
@@ -199,122 +198,6 @@
         document.getElementById('info-card').classList.remove('visible');
     }
 
-    // -------------------------------------------------------------------------
-    // VR INFO PANEL
-    // -------------------------------------------------------------------------
-
-    function showVRInfoPanel(hotspot) {
-        // Show the VR info panel (implemented in vr-ui.js)
-        if (window.showVRInfoPanel) {
-            window.showVRInfoPanel(hotspot);
-        }
-    }
-
-    function hideVRInfoPanel() {
-        // Hide the VR info panel (implemented in vr-ui.js)
-        if (window.hideVRInfoPanel) {
-            window.hideVRInfoPanel();
-        }
-    }
-
-    function updateVRInfoPanelFrame() {
-        // Update the VR info panel frame (implemented in vr-ui.js)
-        if (window.updateVRInfoPanelFrame) {
-            window.updateVRInfoPanelFrame();
-        }
-    }
-
-    function setupVRButton() {
-        // Set up the VR button (implemented in vr-ui.js)
-        if (window.setupVRButton) {
-            window.setupVRButton();
-        }
-    }
-
-    function exitVR() {
-        // Exit VR (implemented in vr-ui.js)
-        if (window.exitVR) {
-            window.exitVR();
-        }
-    }
-
-    function showVRInfoPanel(hotspot) {
-        // Show the VR info panel (implemented in vr-ui.js)
-        if (window.showVRInfoPanel) {
-            window.showVRInfoPanel(hotspot);
-        }
-    }
-
-    function updateVRInfoPanelFrame() {
-        // Update the VR info panel frame (implemented in vr-ui.js)
-        if (window.updateVRInfoPanelFrame) {
-            window.updateVRInfoPanelFrame();
-        }
-    }
-
-    function roundedCardCanvas(hotspot) {
-        var canvas = document.createElement('canvas');
-        canvas.width = 768;
-        canvas.height = 384;
-        var ctx = canvas.getContext('2d');
-
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-        ctx.lineWidth = 6;
-        ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
-
-        ctx.fillStyle = '#3B82F6';
-        ctx.beginPath();
-        ctx.arc(72, 78, 42, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '48px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(hotspot.icon || 'i', 72, 78);
-
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 42px system-ui';
-        ctx.fillText(hotspot.title || 'Information', 140, 72);
-
-        ctx.font = '28px system-ui';
-        ctx.fillStyle = 'rgba(255,255,255,0.82)';
-        var words = (hotspot.description || '').split(' ');
-        var line = '';
-        var y = 150;
-        for (var i = 0; i < words.length; i += 1) {
-            var test = line + words[i] + ' ';
-            if (ctx.measureText(test).width > 560 && i > 0) {
-                ctx.fillText(line, 58, y);
-                line = words[i] + ' ';
-                y += 40;
-            } else {
-                line = test;
-            }
-        }
-        ctx.fillText(line, 58, y);
-
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(676, 22, 58, 58);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 34px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText('×', 705, 53);
-
-        return canvas;
-    }
-
-        // hideVRInfoPanel() removed as VR functionality is removed
-
-        // showVRInfoPanel() removed as VR functionality is removed
-
-        // updateVRInfoPanelFrame() removed as VR functionality is removed
-
-        // setupVRButton() removed as VR functionality is removed
-
     function fullscreenElement() {
         return document.fullscreenElement ||
             document.webkitFullscreenElement ||
@@ -440,7 +323,12 @@
         updateZoomLevel();
         updateCompass();
         updateBackButton();
-        setupVRButton();
+
+        // Setup VR button - call the function from vr-ui.js
+        if (window.setupVRButton) {
+            window.setupVRButton();
+        }
+
         setupFullscreen();
         setupShareButton();
 
@@ -464,22 +352,7 @@
         document.getElementById('info-close').addEventListener('click', hideInfoCard);
     }
 
-        // exitVR() removed as VR functionality is removed
-
-    function setupVRButton() {
-        // Set up the VR button (implemented in vr-ui.js)
-        if (window.setupVRButton) {
-            window.setupVRButton();
-        }
-    }
-
-    function exitVR() {
-        // Exit VR (implemented in vr-ui.js)
-        if (window.exitVR) {
-            window.exitVR();
-        }
-    }
-
+    // Expose functions globally
     window.initUI = initUI;
     window.updateNavMenu = updateNavMenu;
     window.updateMinimap = updateMinimap;
@@ -491,9 +364,6 @@
     window.updateZoomLevel = updateZoomLevel;
     window.showInfoCard = showInfoCard;
     window.hideInfoCard = hideInfoCard;
-    window.showVRInfoPanel = showVRInfoPanel;
-    window.hideVRInfoPanel = hideVRInfoPanel;
-    window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
-    window.setupVRButton = setupVRButton;
-    window.exitVR = exitVR;
+    window.roundedCardCanvas = window.roundedCardCanvas || function () { };
+
 })();
