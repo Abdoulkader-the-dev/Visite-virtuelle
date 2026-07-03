@@ -102,7 +102,7 @@
     //  Copie position caméra + yaw seulement (pas de pitch/roll).
     // -------------------------------------------------------------------------
     function updateVRUI() {
-        if (!window.tourState.isXRActive && !window.tourState.isDragging)) {
+        if (!window.tourState.isXRActive && !window.tourState.isDragging) {
             window.tourState.lon += 0.03;
             window.tourState.autoRotating = true;
         } else {
