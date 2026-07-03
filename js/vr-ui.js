@@ -33,6 +33,64 @@
     var textureLoader = null;
     var hudEuler = new THREE.Euler();
     var hudForward = new THREE.Vector3();
+    var isVRSupported = false;
+    var vrButtonElement = null;
+    var isEnteringVR = false;
+
+    // -------------------------------------------------------------------------
+    //  checkVRSupport() — Vérifie si WebXR est supporté
+    // -------------------------------------------------------------------------
+    function checkVRSupport() {
+        if (!navigator.xr) {
+            console.warn('[VR] WebXR non supporté');
+            updateVRButtonState(false);
+            return false;
+        }
+
+        navigator.xr.isSessionSupported('immersive-vr').then(function (supported) {
+            isVRSupported = supported;
+            if (!supported) {
+                console.warn('[VR] Mode VR non supporté sur ce périphérique');
+                updateVRButtonState(false);
+            } else {
+                updateVRButtonState(true);
+            }
+        }).catch(function (err) {
+            console.warn('[VR] Erreur vérification support:', err);
+            isVRSupported = false;
+            updateVRButtonState(false);
+        });
+
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    //  updateVRButtonState() — Met à jour l'état du bouton VR
+    // -------------------------------------------------------------------------
+    function updateVRButtonState(available) {
+        if (!vrButtonElement) {
+            vrButtonElement = document.getElementById('vr-button');
+        }
+
+        if (!vrButtonElement) return;
+
+        if (!available && !window.tourState.isXRActive) {
+            vrButtonElement.style.display = 'none';
+            return;
+        }
+
+        vrButtonElement.style.display = 'block';
+
+        if (window.tourState.isXRActive) {
+            vrButtonElement.textContent = '✕ Quitter VR';
+            vrButtonElement.classList.add('active');
+            vrButtonElement.setAttribute('aria-label', 'Quitter le mode VR');
+        } else {
+            vrButtonElement.textContent = '🥽 VR';
+            vrButtonElement.classList.remove('active');
+            vrButtonElement.setAttribute('aria-label', 'Entrer en mode VR');
+        }
+    }
 
     // -------------------------------------------------------------------------
     //  buildVRUI() — Crée le HUD dans la scène mondiale (pas sur la caméra)
@@ -80,7 +138,9 @@
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
 
-        window.tourState.scene.add(vrUiGroup);
+        if (window.tourState && window.tourState.scene) {
+            window.tourState.scene.add(vrUiGroup);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -88,20 +148,57 @@
     // -------------------------------------------------------------------------
     function showVRUI() {
         if (!vrUiGroup) { buildVRUI(); }
-        if (vrUiGroup) { vrUiGroup.visible = true; }
+        if (vrUiGroup) {
+            vrUiGroup.visible = true;
+            // Also update the VR button
+            updateVRButtonState(true);
+        }
     }
 
     function hideVRUI() {
-        if (vrUiGroup) { vrUiGroup.visible = false; }
+        if (vrUiGroup) {
+            vrUiGroup.visible = false;
+            // Also update the VR button
+            updateVRButtonState(true);
+        }
     }
 
     // -------------------------------------------------------------------------
     //  initVRUI() — Initialisation du VR UI
     // -------------------------------------------------------------------------
     function initVRUI() {
+        // Find the VR button
+        vrButtonElement = document.getElementById('vr-button');
+        if (vrButtonElement) {
+            // Remove any existing listeners
+            var newButton = vrButtonElement.cloneNode(true);
+            vrButtonElement.parentNode.replaceChild(newButton, vrButtonElement);
+            vrButtonElement = newButton;
+
+            // Add click listener
+            vrButtonElement.addEventListener('click', function (e) {
+                e.preventDefault();
+                toggleVR();
+            });
+        }
+
         buildVRUI();
         hideVRUI();
         buildVRInfoPanel();
+        checkVRSupport();
+    }
+
+    // -------------------------------------------------------------------------
+    //  toggleVR() — Bascule entre mode VR et normal
+    // -------------------------------------------------------------------------
+    function toggleVR() {
+        if (isEnteringVR) return;
+
+        if (window.tourState.isXRActive) {
+            doExitVR();
+        } else {
+            enterVR();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -109,25 +206,89 @@
     // -------------------------------------------------------------------------
     function doExitVR() {
         var renderer = window.tourState.renderer;
-        if (!renderer) { return; }
+        if (!renderer) {
+            window.tourState.isXRActive = false;
+            updateVRButtonState(true);
+            return;
+        }
 
         var session = renderer.xr.getSession();
         if (session) {
             session.end().then(function () {
                 window.tourState.isXRActive = false;
+                isEnteringVR = false;
                 hideVRUI();
                 hideVRInfoPanel();
+                updateVRButtonState(true);
+                console.log('[VR] Session terminée');
             }).catch(function (err) {
                 console.error('[VR] Erreur fin de session:', err);
                 window.tourState.isXRActive = false;
+                isEnteringVR = false;
                 hideVRUI();
                 hideVRInfoPanel();
+                updateVRButtonState(true);
             });
         } else {
             window.tourState.isXRActive = false;
+            isEnteringVR = false;
             hideVRUI();
             hideVRInfoPanel();
+            updateVRButtonState(true);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    //  enterVR() — Entre en mode VR
+    // -------------------------------------------------------------------------
+    function enterVR() {
+        if (isEnteringVR) return;
+
+        var renderer = window.tourState.renderer;
+        if (!renderer || !renderer.xr) {
+            console.error('[VR] Renderer XR non disponible');
+            return;
+        }
+
+        if (!navigator.xr) {
+            console.error('[VR] WebXR non supporté');
+            return;
+        }
+
+        isEnteringVR = true;
+        updateVRButtonState(false);
+
+        navigator.xr.isSessionSupported('immersive-vr').then(function (supported) {
+            if (!supported) {
+                console.error('[VR] Mode VR non supporté sur ce périphérique');
+                isEnteringVR = false;
+                updateVRButtonState(true);
+                return;
+            }
+
+            // Clear any existing session
+            renderer.xr.setSession(null);
+
+            navigator.xr.requestSession('immersive-vr', {
+                requiredFeatures: ['local-floor']
+            }).then(function (session) {
+                renderer.xr.setSession(session);
+                window.tourState.isXRActive = true;
+                isEnteringVR = false;
+                showVRUI();
+                updateVRButtonState(true);
+                console.log('[VR] Session démarrée');
+            }).catch(function (err) {
+                console.error('[VR] Erreur démarrage session:', err);
+                isEnteringVR = false;
+                window.tourState.isXRActive = false;
+                updateVRButtonState(true);
+            });
+        }).catch(function (err) {
+            console.error('[VR] Erreur vérification support:', err);
+            isEnteringVR = false;
+            updateVRButtonState(true);
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -139,6 +300,8 @@
         }
 
         var camera = window.tourState.camera;
+        if (!camera) return;
+
         var position = new THREE.Vector3();
         camera.getWorldPosition(position);
 
@@ -181,7 +344,10 @@
         vrInfoMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), vrInfoMaterial);
         vrInfoMesh.renderOrder = 5;
         vrInfoMesh.visible = false;
-        window.tourState.scene.add(vrInfoMesh);
+
+        if (window.tourState && window.tourState.scene) {
+            window.tourState.scene.add(vrInfoMesh);
+        }
 
         vrInfoPanel = {
             mesh: vrInfoMesh,
@@ -292,6 +458,8 @@
         }
 
         var camera = window.tourState.camera;
+        if (!camera) return;
+
         var position = new THREE.Vector3();
         camera.getWorldPosition(position);
 
@@ -319,58 +487,18 @@
     }
 
     // -------------------------------------------------------------------------
-    //  setupVRButton() — Configure le bouton VR
+    //  setupVRButton() — Configure le bouton VR (appelé depuis ui.js)
     // -------------------------------------------------------------------------
     function setupVRButton() {
-        var vrButton = document.getElementById('vr-btn');
-        if (!vrButton) { return; }
-
-        // Remove existing listeners to avoid duplicates
-        var newButton = vrButton.cloneNode(true);
-        vrButton.parentNode.replaceChild(newButton, vrButton);
-        vrButton = newButton;
-
-        vrButton.addEventListener('click', function () {
-            if (window.tourState.isXRActive) {
-                doExitVR();
-            } else {
-                enterVR();
+        // Button is already set up in initVRUI
+        // This is just a placeholder for compatibility
+        if (!vrButtonElement) {
+            vrButtonElement = document.getElementById('vr-button');
+            if (vrButtonElement) {
+                vrButtonElement.addEventListener('click', toggleVR);
             }
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    //  enterVR() — Entre en mode VR
-    // -------------------------------------------------------------------------
-    function enterVR() {
-        var renderer = window.tourState.renderer;
-        if (!renderer || !renderer.xr) {
-            console.error('[VR] Renderer XR non disponible');
-            return;
         }
-
-        if (!navigator.xr) {
-            console.error('[VR] WebXR non supporté');
-            return;
-        }
-
-        navigator.xr.isSessionSupported('immersive-vr').then(function (supported) {
-            if (!supported) {
-                console.error('[VR] Mode VR non supporté sur ce périphérique');
-                return;
-            }
-
-            renderer.xr.setSession(null);
-
-            navigator.xr.requestSession('immersive-vr', {
-                requiredFeatures: ['local-floor', 'hand-tracking']
-            }).then(function (session) {
-                renderer.xr.setSession(session);
-                showVRUI();
-            }).catch(function (err) {
-                console.error('[VR] Erreur démarrage session:', err);
-            });
-        });
+        updateVRButtonState(true);
     }
 
     // -------------------------------------------------------------------------
@@ -379,6 +507,27 @@
     function setupXRControllers() {
         var renderer = window.tourState.renderer;
         if (!renderer || !renderer.xr) return;
+
+        // Remove existing listeners to avoid duplicates
+        renderer.xr.removeAllListeners('select');
+        renderer.xr.removeAllListeners('sessionstart');
+        renderer.xr.removeAllListeners('sessionend');
+
+        renderer.xr.addEventListener('sessionstart', function () {
+            window.tourState.isXRActive = true;
+            showVRUI();
+            updateVRButtonState(true);
+            console.log('[VR] Session started');
+        });
+
+        renderer.xr.addEventListener('sessionend', function () {
+            window.tourState.isXRActive = false;
+            isEnteringVR = false;
+            hideVRUI();
+            hideVRInfoPanel();
+            updateVRButtonState(true);
+            console.log('[VR] Session ended');
+        });
 
         renderer.xr.addEventListener('select', function (event) {
             var controller = event.target;
@@ -480,6 +629,16 @@
         return canvas;
     }
 
+    // -------------------------------------------------------------------------
+    //  getVRButton() — Retourne le bouton VR
+    // -------------------------------------------------------------------------
+    function getVRButton() {
+        if (!vrButtonElement) {
+            vrButtonElement = document.getElementById('vr-button');
+        }
+        return vrButtonElement;
+    }
+
     // Exposer les fonctions globalement
     window.loadScene = window.loadScene || function () { console.warn('loadScene not defined'); };
     window.preloadAllScenes = window.preloadAllScenes || function () { };
@@ -491,13 +650,17 @@
     window.showVRUI = showVRUI;
     window.hideVRUI = hideVRUI;
     window.doExitVR = doExitVR;
+    window.enterVR = enterVR;
+    window.toggleVR = toggleVR;
     window.showVRInfoPanel = showVRInfoPanel;
     window.hideVRInfoPanel = hideVRInfoPanel;
     window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
     window.setupVRButton = setupVRButton;
     window.exitVR = doExitVR;
-    window.enterVR = enterVR;
     window.setupXRControllers = setupXRControllers;
     window.roundedCardCanvas = roundedCardCanvas;
+    window.getVRButton = getVRButton;
+    window.checkVRSupport = checkVRSupport;
+    window.updateVRButtonState = updateVRButtonState;
 
 })();
