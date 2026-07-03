@@ -3,6 +3,7 @@
 
     var textureLoader;
     var textureCache = {};
+    var xrBaseReferenceSpace = null;
 
     function vectorFromConfig(position) {
         return new THREE.Vector3(position.x, position.y, position.z);
@@ -287,6 +288,7 @@
             window.tourState.isXRActive = true;
             document.body.classList.add('xr-active');
             document.getElementById('reticle').classList.add('active');
+            xrBaseReferenceSpace = renderer.xr.getReferenceSpace();
         });
 
         renderer.xr.addEventListener('sessionend', function () {
@@ -294,12 +296,35 @@
             document.body.classList.remove('xr-active');
             document.getElementById('reticle').classList.remove('active');
             document.getElementById('reticle-progress').classList.remove('active');
+            xrBaseReferenceSpace = null;
         });
     }
 
-    function renderFrame() {
+    function applyXRPositionalOffset(frame) {
+        var renderer = window.tourState.renderer;
+        if (!xrBaseReferenceSpace) return;
+
+        var viewerPose = frame.getViewerPose(xrBaseReferenceSpace);
+        if (!viewerPose) return;
+
+        var pos = viewerPose.transform.position;
+
+        var offsetTransform = new XRRigidTransform(
+            { x: pos.x, y: pos.y, z: pos.z },
+            { x: 0, y: 0, z: 0, w: 1 }
+        );
+
+        var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
+        renderer.xr.setReferenceSpace(offsetReferenceSpace);
+    }
+
+    function renderFrame(timestamp, frame) {
         updateAutoRotation();
         updateCameraLookAt();
+
+        if (window.tourState.isXRActive && frame) {
+            applyXRPositionalOffset(frame);
+        }
 
         if (window.updateHotspots) {
             window.updateHotspots();
@@ -357,7 +382,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
-        renderer.xr.setReferenceSpaceType('viewer');
         // Correction luminosité — les photos prises en intérieur apparaissent
         // sombres sans ces deux paramètres. outputEncoding sRGB = couleurs fidèles.
         // toneMapping LinearToneMapping + exposure = contrôle de la luminosité globale.
