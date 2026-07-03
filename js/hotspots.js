@@ -532,7 +532,25 @@
     // utilisée). Parcourt tourState.xrControllers et retourne la première
     // manette valide avec une matrixWorld à jour. Fallback sur le contrôleur 0.
     // -------------------------------------------------------------------------
-        // getActiveController() removed as VR functionality is removed
+        // -------------------------------------------------------------------------
+// getActiveController()
+//
+// Retourne la manette WebXR active (celle qui a le focus ou la dernière
+// utilisée). Parcourt tourState.xrControllers et retourne la première
+// manette valide avec une matrixWorld à jour. Fallback sur le contrôleur 0.
+// -------------------------------------------------------------------------
+function getActiveController() {
+    var controllers = window.tourState.xrControllers;
+    if (!controllers) { return null; }
+
+    for (var i = 0; i < controllers.length; i++) {
+        var controller = controllers[i];
+        if (controller && controller.matrixWorld) {
+            return controller;
+        }
+    }
+    return controllers.length > 0 ? controllers[0] : null;
+}
 
     // -------------------------------------------------------------------------
     // updateGroundHotspots()
@@ -688,12 +706,47 @@
     // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
     // "Quitter" soit intercepté par la flèche.
     // -------------------------------------------------------------------------
-    // handleXRSelect() removed as VR functionality is removed
+    // -------------------------------------------------------------------------
+// handleXRSelect() — Gâchette manette : teste d'abord le bouton Quitter VR,
+// puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
+// "Quitter" soit intercepté par la flèche.
+// -------------------------------------------------------------------------
+function handleXRSelect() {
+    // Test d'abord le bouton Quitter VR (priorité absolue)
+    if (window.vrExitButton) {
+        var raycaster = new THREE.Raycaster();
+        var tip = new THREE.Vector3(0, 0, -1); // Direction vers l'avant du contrôleur
+        tip.applyQuaternion(window.vrExitButton.quaternion);
+        raycaster.set(window.vrExitButton.position, tip);
+
+        var intersects = raycaster.intersectObject(window.vrExitButton);
+        if (intersects.length > 0) {
+            if (window.doExitVR) {
+                window.doExitVR();
+                return;
+            }
+        }
+    }
+
+    // Test ensuite la flèche au sol
+    if (groundHotspotEntry && groundHotspotEntry.hotspot) {
+        if (window.triggerGSVTransition) {
+            window.triggerGSVTransition(
+                groundHotspotEntry.hotspot.target,
+                bearingForHotspot(groundHotspotEntry.hotspot),
+                { hotspot: groundHotspotEntry.hotspot }
+            );
+        }
+    }
+}
 
     window.initHotspots = initHotspots;
     window.updateHotspots = updateHotspots;
     window.onValidClick = onValidClick;
     window.onDoubleClick = onDoubleClick;
     window.rebuildHotspots = initHotspots;
-    // VR-specific functions removed: handleXRSelect, getActiveController, getGroundHotspotMeshes
+    // VR-specific functions
+    window.getActiveController = getActiveController;
+    window.getGroundHotspotMeshes = function() { return allGroundHotspotMeshes; };
+    window.handleXRSelect = handleXRSelect;
 })();

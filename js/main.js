@@ -9,6 +9,8 @@
     // principale du chargement lent / de la lourdeur en VR.
     var MAX_CACHED_TEXTURES = 5;
     var textureCache = new Map(); // insertion order = ordre d'accès (LRU)
+    var xrBaseReferenceSpace = null;
+    var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
         
     function isTextureInUse(texture) {
         var ts = window.tourState;
@@ -36,6 +38,49 @@
             texture.dispose();
             textureCache.delete(key);
         }
+    }
+
+    function applyXRPositionalOffset(frame) {
+        var renderer = window.tourState.renderer;
+        if (!xrBaseReferenceSpace) return;
+
+        var viewerPose = frame.getViewerPose(xrBaseReferenceSpace);
+        if (!viewerPose) return;
+
+        var pos = viewerPose.transform.position;
+
+        // [PERF] XRRigidTransform doit être recréé (objet immuable côté
+        // navigateur), mais on évite au moins la création d'un objet
+        // littéral {x,y,z} intermédiaire séparé — impact mineur mais
+        // chaque allocation compte à 72-90 frames/seconde sur Quest.
+        var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
+        var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
+        renderer.xr.setReferenceSpace(offsetReferenceSpace);
+    }
+
+    function setupXRControllers() {
+        var renderer = window.tourState.renderer;
+        if (!renderer) return;
+
+        // Initialize controller tracking
+        var controllers = [];
+        for (var i = 0; i < 2; i++) {
+            var controller = renderer.xr.getController(i);
+            controller.userData = { index: i };
+            controllers.push(controller);
+        }
+        window.tourState.xrControllers = controllers;
+
+        // Set up event listeners for controller connection/disconnection
+        renderer.xr.addEventListener('connected', function(event) {
+            console.log('[XR] Controller connected:', event.data);
+        });
+
+        renderer.xr.addEventListener('disconnected', function(event) {
+            console.log('[XR] Controller disconnected:', event.data);
+        });
+
+        console.log('[XR] Controllers initialized');
     }
 
     function vectorFromConfig(position) {
@@ -302,7 +347,7 @@
 
     
     
-    function renderFrame(timestamp) {
+    function renderFrame(timestamp, frame) {
         updateAutoRotation();
         updateCameraLookAt();
 
@@ -315,7 +360,14 @@
         if (window.updateCompass) {
             window.updateCompass();
         }
-        // Removed VRUI update as vr-ui.js will be removed
+        if (window.updateVRUI) {
+            window.updateVRUI();
+        }
+
+        // Update XR pose if available
+        if (frame && window.tourState.isXRActive) {
+            applyXRPositionalOffset(frame);
+        }
 
         window.tourState.renderer.render(window.tourState.scene, window.tourState.camera);
     }
@@ -359,7 +411,7 @@
         var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
-        // VR/AR disabled - renderer.xr.enabled = false;
+        renderer.xr.enabled = true; // Enable WebXR
         // Correction luminosité — les photos prises en intérieur apparaissent
         // sombres sans ces deux paramètres. outputEncoding sRGB = couleurs fidèles.
         // toneMapping LinearToneMapping + exposure = contrôle de la luminosité globale.
@@ -386,6 +438,7 @@
         window.tourState.scene = scene;
         window.tourState.sphere = sphere;
         window.tourState.sphere2 = sphere2;
+        window.tourState.isXRActive = false;
 
         if (window.initControls) {
             window.initControls();
@@ -393,7 +446,13 @@
         if (window.initUI) {
             window.initUI();
         }
-        // VRUI and XR controls removed as part of VR feature removal
+        if (window.initVRUI) {
+            window.initVRUI();
+        }
+        if (window.initXRControls) {
+            window.initXRControls();
+        }
+        setupXRControllers();
         window.addEventListener('resize', onResize);
 
         var startParams = getStartParams();

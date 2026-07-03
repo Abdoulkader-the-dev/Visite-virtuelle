@@ -176,7 +176,10 @@
     }
 
     function showInfoCard(hotspot, screenX, screenY) {
-        // VR-specific code removed as VR functionality is removed
+        if (window.tourState.isXRActive && window.showVRInfoPanel) {
+            window.showVRInfoPanel(hotspot);
+            return;
+        }
 
         var card = document.getElementById('info-card');
         document.getElementById('info-icon').textContent = hotspot.icon || 'i';
@@ -194,6 +197,59 @@
 
     function hideInfoCard() {
         document.getElementById('info-card').classList.remove('visible');
+    }
+
+    // -------------------------------------------------------------------------
+    // VR INFO PANEL
+    // -------------------------------------------------------------------------
+
+    function showVRInfoPanel(hotspot) {
+        // Show the VR info panel (implemented in vr-ui.js)
+        if (window.showVRInfoPanel) {
+            window.showVRInfoPanel(hotspot);
+        }
+    }
+
+    function hideVRInfoPanel() {
+        // Hide the VR info panel (implemented in vr-ui.js)
+        if (window.hideVRInfoPanel) {
+            window.hideVRInfoPanel();
+        }
+    }
+
+    function updateVRInfoPanelFrame() {
+        // Update the VR info panel frame (implemented in vr-ui.js)
+        if (window.updateVRInfoPanelFrame) {
+            window.updateVRInfoPanelFrame();
+        }
+    }
+
+    function setupVRButton() {
+        // Set up the VR button (implemented in vr-ui.js)
+        if (window.setupVRButton) {
+            window.setupVRButton();
+        }
+    }
+
+    function exitVR() {
+        // Exit VR (implemented in vr-ui.js)
+        if (window.exitVR) {
+            window.exitVR();
+        }
+    }
+
+    function showVRInfoPanel(hotspot) {
+        // Show the VR info panel (implemented in vr-ui.js)
+        if (window.showVRInfoPanel) {
+            window.showVRInfoPanel(hotspot);
+        }
+    }
+
+    function updateVRInfoPanelFrame() {
+        // Update the VR info panel frame (implemented in vr-ui.js)
+        if (window.updateVRInfoPanelFrame) {
+            window.updateVRInfoPanelFrame();
+        }
     }
 
     function roundedCardCanvas(hotspot) {
@@ -384,7 +440,7 @@
         updateZoomLevel();
         updateCompass();
         updateBackButton();
-        // setupVRButton() removed as VR functionality is removed
+        setupVRButton();
         setupFullscreen();
         setupShareButton();
 
@@ -410,6 +466,20 @@
 
         // exitVR() removed as VR functionality is removed
 
+    function setupVRButton() {
+        // Set up the VR button (implemented in vr-ui.js)
+        if (window.setupVRButton) {
+            window.setupVRButton();
+        }
+    }
+
+    function exitVR() {
+        // Exit VR (implemented in vr-ui.js)
+        if (window.exitVR) {
+            window.exitVR();
+        }
+    }
+
     window.initUI = initUI;
     window.updateNavMenu = updateNavMenu;
     window.updateMinimap = updateMinimap;
@@ -421,5 +491,9 @@
     window.updateZoomLevel = updateZoomLevel;
     window.showInfoCard = showInfoCard;
     window.hideInfoCard = hideInfoCard;
-    // VR-specific functions removed: showVRInfoPanel, hideVRInfoPanel, updateVRInfoPanelFrame, exitVR
+    window.showVRInfoPanel = showVRInfoPanel;
+    window.hideVRInfoPanel = hideVRInfoPanel;
+    window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
+    window.setupVRButton = setupVRButton;
+    window.exitVR = exitVR;
 })();

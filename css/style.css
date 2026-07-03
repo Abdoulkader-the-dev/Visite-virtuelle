@@ -562,11 +562,84 @@ body.has-history #nav-toggle {
     color: rgba(255, 255, 255, 0.78);
 }
 
-    // #vr-button rules removed as VR functionality is removed
+#vr-button {
+    position: fixed !important;
+    left: 50% !important;
+    bottom: 30px !important;
+    z-index: 9999 !important;
+    transform: translateX(-50%) !important;
+    padding: 12px 24px !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 8px !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+    backdrop-filter: blur(8px) !important;
+    color: #fff !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
 
-    // #reticle and #reticle-progress rules removed as VR functionality is removed
+#vr-button:hover {
+    background: #3B82F6 !important;
+    border-color: #3B82F6 !important;
+    transform: translateX(-50%) scale(1.05) !important;
+}
 
-    // body.xr-active rules removed as VR functionality is removed
+#vr-button.unsupported {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+    background: #333 !important;
+}
+
+#reticle {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 999;
+    width: 20px;
+    height: 20px;
+    display: none;
+    border: 2px solid white;
+    border-radius: 50%;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+}
+
+#reticle.active {
+    display: block;
+}
+
+#reticle-progress {
+    position: absolute;
+    top: -7px;
+    left: -7px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    border-top-color: #3B82F6;
+    opacity: 0;
+}
+
+#reticle-progress.active {
+    opacity: 1;
+    animation: spin 2s linear infinite;
+}
+
+body.xr-active #nav-menu,
+body.xr-active #nav-toggle,
+body.xr-active #back-btn,
+body.xr-active #minimap,
+body.xr-active #zoom-controls,
+body.xr-active #fullscreen-btn,
+body.xr-active #compass,
+body.xr-active #info-card {
+    opacity: 0;
+    pointer-events: none;
+}
 
 .vr-panel {
     background: rgba(0, 0, 0, 0.72);
