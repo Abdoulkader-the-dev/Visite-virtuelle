@@ -9,9 +9,7 @@
     // principale du chargement lent / de la lourdeur en VR.
     var MAX_CACHED_TEXTURES = 5;
     var textureCache = new Map(); // insertion order = ordre d'accès (LRU)
-    var xrBaseReferenceSpace = null;
-    var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
-
+        
     function isTextureInUse(texture) {
         var ts = window.tourState;
         if (!ts) return false;
@@ -287,8 +285,6 @@
     }
 
     function updateCameraLookAt() {
-        if (window.tourState.isXRActive) return;
-
         var phi = (90 - window.tourState.lat) * Math.PI / 180;
         var theta = window.tourState.lon * Math.PI / 180;
 
@@ -304,83 +300,11 @@
         }
     }
 
-    function setupXRControllers() {
-        var renderer = window.tourState.renderer;
-        var scene = window.tourState.scene;
-
-        for (var i = 0; i < 2; i += 1) {
-            var controller = renderer.xr.getController(i);
-
-            // Rayon laser
-            var geometry = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(0, 0, -4)
-            ]);
-            var material = new THREE.LineBasicMaterial({ color: 0x3B82F6 });
-            var line = new THREE.Line(geometry, material);
-            line.name = 'controller-ray';
-            line.scale.z = 1;
-            controller.add(line);
-
-            // 🔥 Écouteur SELECT (clic)
-            controller.addEventListener('select', function (event) {
-                if (window.handleXRSelect) {
-                    window.handleXRSelect(event);
-                }
-            });
-
-            // 🔥 Écouteur JOYSTICK (thumbstick)
-            controller.addEventListener('thumbstickmoved', function (event) {
-                if (window.handleVRJoystick) {
-                    window.handleVRJoystick(event);
-                }
-            });
-
-            scene.add(controller);
-            window.tourState.xrControllers.push(controller);
-        }
-
-        renderer.xr.addEventListener('sessionstart', function () {
-            window.tourState.isXRActive = true;
-            document.body.classList.add('xr-active');
-            document.getElementById('reticle').classList.add('active');
-            xrBaseReferenceSpace = renderer.xr.getReferenceSpace();
-        });
-
-        renderer.xr.addEventListener('sessionend', function () {
-            window.tourState.isXRActive = false;
-            document.body.classList.remove('xr-active');
-            document.getElementById('reticle').classList.remove('active');
-            document.getElementById('reticle-progress').classList.remove('active');
-            xrBaseReferenceSpace = null;
-        });
-    }
-
-    function applyXRPositionalOffset(frame) {
-        var renderer = window.tourState.renderer;
-        if (!xrBaseReferenceSpace) return;
-
-        var viewerPose = frame.getViewerPose(xrBaseReferenceSpace);
-        if (!viewerPose) return;
-
-        var pos = viewerPose.transform.position;
-
-        // [PERF] XRRigidTransform doit être recréé (objet immuable côté
-        // navigateur), mais on évite au moins la création d'un objet
-        // littéral {x,y,z} intermédiaire séparé — impact mineur mais
-        // chaque allocation compte à 72-90 frames/seconde sur Quest.
-        var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
-        var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
-        renderer.xr.setReferenceSpace(offsetReferenceSpace);
-    }
-
-    function renderFrame(timestamp, frame) {
+    
+    
+    function renderFrame(timestamp) {
         updateAutoRotation();
         updateCameraLookAt();
-
-        if (window.tourState.isXRActive && frame) {
-            applyXRPositionalOffset(frame);
-        }
 
         if (window.updateHotspots) {
             window.updateHotspots();
@@ -391,9 +315,7 @@
         if (window.updateCompass) {
             window.updateCompass();
         }
-        if (window.updateVRUI) {
-            window.updateVRUI();
-        }
+        // Removed VRUI update as vr-ui.js will be removed
 
         window.tourState.renderer.render(window.tourState.scene, window.tourState.camera);
     }
@@ -437,7 +359,7 @@
         var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
-        renderer.xr.enabled = true;
+        // VR/AR disabled - renderer.xr.enabled = false;
         // Correction luminosité — les photos prises en intérieur apparaissent
         // sombres sans ces deux paramètres. outputEncoding sRGB = couleurs fidèles.
         // toneMapping LinearToneMapping + exposure = contrôle de la luminosité globale.
@@ -471,14 +393,7 @@
         if (window.initUI) {
             window.initUI();
         }
-        if (window.initVRUI) {
-            window.initVRUI();
-        }
-        if (window.initXRControls) {
-            window.initXRControls();
-        }
-
-        setupXRControllers();
+        // VRUI and XR controls removed as part of VR feature removal
         window.addEventListener('resize', onResize);
 
         var startParams = getStartParams();

@@ -10,6 +10,8 @@
 
     var vrUiGroup = null;
     var exitButton = null;
+    var hudEuler = new THREE.Euler(); // [PERF] réutilisé chaque frame, plus de "new" dans updateVRUI()
+    var hudForward = new THREE.Vector3();
 
     // -------------------------------------------------------------------------
     //  buildVRUI() — Crée le HUD dans la scène mondiale (pas sur la caméra)
@@ -76,27 +78,6 @@
     }
 
     // -------------------------------------------------------------------------
-    //  handleXRSelect() — Trigger/squeeze sur un contrôleur
-    //  Teste uniquement le bouton Quitter VR.
-    // -------------------------------------------------------------------------
-    function handleXRSelect(event) {
-        var controller = event.target;
-        var tempMatrix = new THREE.Matrix4();
-        tempMatrix.identity().extractRotation(controller.matrixWorld);
-
-        var raycaster = new THREE.Raycaster();
-        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-        if (exitButton) {
-            var hits = raycaster.intersectObject(exitButton, false);
-            if (hits.length > 0 && hits[0].distance < 3.0) {
-                doExitVR();
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
     //  doExitVR() — Ferme proprement la session WebXR
     // -------------------------------------------------------------------------
     function doExitVR() {
@@ -127,14 +108,13 @@
 
         vrUiGroup.position.copy(camera.position);
 
-        var euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-        euler.x = 0;
-        euler.z = 0;
-        vrUiGroup.quaternion.setFromEuler(euler);
+        hudEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+        hudEuler.x = 0;
+        hudEuler.z = 0;
+        vrUiGroup.quaternion.setFromEuler(hudEuler);
 
-        var forward = new THREE.Vector3(0, 0, -1.5);
-        forward.applyQuaternion(vrUiGroup.quaternion);
-        vrUiGroup.position.add(forward);
+        hudForward.set(0, 0, -1.5).applyQuaternion(vrUiGroup.quaternion);
+        vrUiGroup.position.add(hudForward);
     }
 
     // -------------------------------------------------------------------------
@@ -155,12 +135,6 @@
         }
     }
 
-    function handleVRJoystick() {
-        // Désactivé — le joystick est géré par xr-controls.js
-    }
-    function handleXRSelect(event) {
-        // Désactivé — handleXRSelect de hotspots.js est utilisée à la place
-    }
     window.initVRUI = initVRUI;
     window.updateVRUI = updateVRUI;
     window.showVRUI = showVRUI;

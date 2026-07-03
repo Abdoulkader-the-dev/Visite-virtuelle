@@ -13,6 +13,8 @@
     var lastTriggerTime = 0;
     var TRIGGER_COOLDOWN = 800;
 
+    var controllerEventsAttached = false;
+
     function initXRControls() {
         var renderer = window.tourState.renderer;
         if (!renderer) return;
@@ -24,6 +26,16 @@
 
     function setupControllerEvents() {
         var controllers = window.tourState.xrControllers;
+
+        // [FIX] Sans ce garde, remettre le casque (2e, 3e... sessionstart)
+        // réattachait de nouveaux listeners par-dessus les anciens à chaque
+        // fois → chaque mouvement de joystick / gâchette se déclenchait
+        // deux, trois, quatre fois en même temps (rotation trop rapide,
+        // hotspots qui semblent "buguer" ou se déclencher plusieurs fois).
+        if (controllerEventsAttached) {
+            return;
+        }
+        controllerEventsAttached = true;
 
         controllers.forEach(function (controller, index) {
             // ── 1. Joystick (thumbstick) — rotation continue + trigger hotspot ──

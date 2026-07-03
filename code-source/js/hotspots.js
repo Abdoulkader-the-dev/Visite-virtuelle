@@ -22,6 +22,9 @@
     var infoElements = [];
     var xrRaycaster = new THREE.Raycaster();
     var tempMatrix = new THREE.Matrix4();
+    var ctrlMatrix = new THREE.Matrix4(); // [PERF] réutilisée chaque frame en VR, plus de "new" dans la boucle
+    var rayOrigin = new THREE.Vector3();  // [PERF] idem
+    var rayDir = new THREE.Vector3();     // [PERF] idem
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
     var GROUND_RADIUS = 3.5;
@@ -586,10 +589,11 @@
             }
 
             // Extraire position et direction mondiales de la manette via matrixWorld
-            var ctrlMatrix = new THREE.Matrix4();
+            // [PERF] ctrlMatrix/rayOrigin/rayDir sont réutilisés (module scope),
+            // plus d'allocation par frame ici.
             ctrlMatrix.identity().extractRotation(controller.matrixWorld);
-            var rayOrigin = new THREE.Vector3().setFromMatrixPosition(controller.matrixWorld);
-            var rayDir = new THREE.Vector3(0, 0, -1).applyMatrix4(ctrlMatrix).normalize();
+            rayOrigin.setFromMatrixPosition(controller.matrixWorld);
+            rayDir.set(0, 0, -1).applyMatrix4(ctrlMatrix).normalize();
 
             // Guard #1 : manette parallèle au sol (dir.y ≈ 0) → division par zéro imminente
             if (Math.abs(rayDir.y) < 0.001) {

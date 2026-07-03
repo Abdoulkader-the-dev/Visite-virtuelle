@@ -2,7 +2,43 @@
     'use strict';
 
     var textureLoader;
-    var textureCache = {};
+    // [FIX MAJEUR] L'ancien cache était un objet simple qui ne libérait JAMAIS
+    // aucune texture — 24 panoramas GoPro haute résolution s'accumulaient tous
+    // en VRAM au fil de la navigation. Le cahier des charges impose une LRU
+    // limitée à 5 textures max avec dispose() explicite. C'est la cause
+    // principale du chargement lent / de la lourdeur en VR.
+    var MAX_CACHED_TEXTURES = 5;
+    var textureCache = new Map(); // insertion order = ordre d'accès (LRU)
+    var xrBaseReferenceSpace = null;
+    var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
+
+    function isTextureInUse(texture) {
+        var ts = window.tourState;
+        if (!ts) return false;
+        if (texture === ts.currentTexture) return true;
+        if (ts.sphere && ts.sphere.material && ts.sphere.material.map === texture) return true;
+        if (ts.sphere2 && ts.sphere2.material && ts.sphere2.material.map === texture) return true;
+        return false;
+    }
+
+    function evictLRUIfNeeded() {
+        if (textureCache.size <= MAX_CACHED_TEXTURES) {
+            return;
+        }
+        // Map conserve l'ordre d'insertion : les premières entrées sont les
+        // plus anciennes (least recently used, puisqu'on ré-insère au get()).
+        var it = textureCache.keys();
+        var toCheck = Array.from(it);
+        for (var i = 0; i < toCheck.length && textureCache.size > MAX_CACHED_TEXTURES; i += 1) {
+            var key = toCheck[i];
+            var texture = textureCache.get(key);
+            if (!texture || isTextureInUse(texture)) {
+                continue; // jamais dispose une texture actuellement affichée
+            }
+            texture.dispose();
+            textureCache.delete(key);
+        }
+    }
 
     function vectorFromConfig(position) {
         return new THREE.Vector3(position.x, position.y, position.z);
@@ -30,8 +66,12 @@
     }
 
     function loadTexture(path) {
-        if (textureCache[path]) {
-            return Promise.resolve(textureCache[path]);
+        if (textureCache.has(path)) {
+            var cached = textureCache.get(path);
+            // Ré-insertion pour marquer comme "récemment utilisée" (ordre LRU)
+            textureCache.delete(path);
+            textureCache.set(path, cached);
+            return Promise.resolve(cached);
         }
 
         var candidates = imageCandidates(path);
@@ -52,11 +92,19 @@
                     function (texture) {
                         texture.minFilter = THREE.LinearFilter;
                         texture.magFilter = THREE.LinearFilter;
+                        // [PERF] mipmaps jamais utilisés avec LinearFilter (non-mipmap) —
+                        // les désactiver évite au GPU de générer une chaîne de mipmaps
+                        // complète pour rien à chaque upload de panorama haute résolution.
+                        // Gain direct sur le temps de chargement, surtout à l'entrée en VR.
+                        texture.generateMipmaps = false;
                         // encoding doit correspondre à renderer.outputEncoding = sRGBEncoding
                         texture.encoding = THREE.sRGBEncoding;
                         texture.needsUpdate = true; // [CORRECTION GSV] force le upload GPU
-                        textureCache[path] = texture;
-                        textureCache[candidate] = texture;
+                        textureCache.set(path, texture);
+                        if (candidate !== path) {
+                            textureCache.set(candidate, texture);
+                        }
+                        evictLRUIfNeeded();
                         resolve(texture);
                     },
                     undefined,
@@ -89,6 +137,7 @@
         var currentConfig = window.TOUR_CONFIG.scenes[currentId];
         var linkedIds = [];
         var remainingIds;
+        var budget;
 
         if (currentConfig) {
             linkedIds = (currentConfig.hotspots || [])
@@ -100,9 +149,17 @@
                 });
         }
 
+        // [FIX] Avec un cache LRU limité à MAX_CACHED_TEXTURES, précharger
+        // les 24 scènes ne sert plus à rien : la plupart seraient décodées
+        // puis aussitôt évincées avant même d'être vues — gaspillage pur de
+        // bande passante et de temps de décodage JPEG, exactement au moment
+        // où l'utilisateur essaie d'entrer en VR. On ne précharge que ce que
+        // le budget de cache peut réellement conserver.
+        budget = Math.max(0, MAX_CACHED_TEXTURES - 1 - linkedIds.length);
+
         remainingIds = allIds.filter(function (id) {
             return id !== currentId && linkedIds.indexOf(id) === -1;
-        });
+        }).slice(0, budget);
 
         function loadNext(ids, index) {
             var idle;
@@ -287,6 +344,7 @@
             window.tourState.isXRActive = true;
             document.body.classList.add('xr-active');
             document.getElementById('reticle').classList.add('active');
+            xrBaseReferenceSpace = renderer.xr.getReferenceSpace();
         });
 
         renderer.xr.addEventListener('sessionend', function () {
@@ -294,12 +352,35 @@
             document.body.classList.remove('xr-active');
             document.getElementById('reticle').classList.remove('active');
             document.getElementById('reticle-progress').classList.remove('active');
+            xrBaseReferenceSpace = null;
         });
     }
 
-    function renderFrame() {
+    function applyXRPositionalOffset(frame) {
+        var renderer = window.tourState.renderer;
+        if (!xrBaseReferenceSpace) return;
+
+        var viewerPose = frame.getViewerPose(xrBaseReferenceSpace);
+        if (!viewerPose) return;
+
+        var pos = viewerPose.transform.position;
+
+        // [PERF] XRRigidTransform doit être recréé (objet immuable côté
+        // navigateur), mais on évite au moins la création d'un objet
+        // littéral {x,y,z} intermédiaire séparé — impact mineur mais
+        // chaque allocation compte à 72-90 frames/seconde sur Quest.
+        var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
+        var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
+        renderer.xr.setReferenceSpace(offsetReferenceSpace);
+    }
+
+    function renderFrame(timestamp, frame) {
         updateAutoRotation();
         updateCameraLookAt();
+
+        if (window.tourState.isXRActive && frame) {
+            applyXRPositionalOffset(frame);
+        }
 
         if (window.updateHotspots) {
             window.updateHotspots();
@@ -353,7 +434,7 @@
         var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 0, 0.001);
 
-        var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;

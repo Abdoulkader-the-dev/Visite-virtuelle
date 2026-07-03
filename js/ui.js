@@ -2,9 +2,7 @@
     'use strict';
 
     var minimapArrow = null;
-    var vrInfoGroup = null;
-    var vrInfoCloseMesh = null;
-    var closeGazeStart = 0;
+    // VR-related variables removed as VR functionality is removed
 
     function sceneIds() {
         return Object.keys(window.TOUR_CONFIG.scenes);
@@ -178,10 +176,7 @@
     }
 
     function showInfoCard(hotspot, screenX, screenY) {
-        if (window.tourState.isXRActive && window.showVRInfoPanel) {
-            window.showVRInfoPanel(hotspot);
-            return;
-        }
+        // VR-specific code removed as VR functionality is removed
 
         var card = document.getElementById('info-card');
         document.getElementById('info-icon').textContent = hotspot.icon || 'i';
@@ -256,121 +251,13 @@
         return canvas;
     }
 
-    function hideVRInfoPanel() {
-        if (vrInfoGroup && window.tourState.scene) {
-            window.tourState.scene.remove(vrInfoGroup);
-        }
-        vrInfoGroup = null;
-        vrInfoCloseMesh = null;
-        closeGazeStart = 0;
-        window.tourState.xrInfoPanel = null;
-    }
+        // hideVRInfoPanel() removed as VR functionality is removed
 
-    function showVRInfoPanel(hotspot) {
-        hideVRInfoPanel();
+        // showVRInfoPanel() removed as VR functionality is removed
 
-        var texture = new THREE.CanvasTexture(roundedCardCanvas(hotspot));
-        var material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
-        var panel = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.2), material);
+        // updateVRInfoPanelFrame() removed as VR functionality is removed
 
-        var closeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.001 });
-        vrInfoCloseMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.28), closeMaterial);
-        vrInfoCloseMesh.position.set(1.02, 0.44, 0.01);
-        vrInfoCloseMesh.userData.close = true;
-
-        vrInfoGroup = new THREE.Group();
-        vrInfoGroup.add(panel);
-        vrInfoGroup.add(vrInfoCloseMesh);
-        window.tourState.scene.add(vrInfoGroup);
-        window.tourState.xrInfoPanel = vrInfoGroup;
-        updateVRInfoPanelFrame();
-    }
-
-    function updateVRInfoPanelFrame() {
-        if (!vrInfoGroup || !window.tourState.camera) {
-            return;
-        }
-
-        var camera = window.tourState.camera;
-        var direction = camera.getWorldDirection(new THREE.Vector3());
-        var position = camera.getWorldPosition(new THREE.Vector3()).add(direction.multiplyScalar(2));
-        vrInfoGroup.position.copy(position);
-        vrInfoGroup.quaternion.copy(camera.quaternion);
-
-        if (window.tourState.isXRActive && vrInfoCloseMesh) {
-            var ray = new THREE.Ray(
-                camera.getWorldPosition(new THREE.Vector3()),
-                camera.getWorldDirection(new THREE.Vector3())
-            );
-            var hit = ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(
-                camera.getWorldDirection(new THREE.Vector3()).negate(),
-                vrInfoGroup.position
-            ), new THREE.Vector3());
-
-            if (hit && vrInfoCloseMesh.getWorldPosition(new THREE.Vector3()).distanceTo(hit) < 0.28) {
-                if (!closeGazeStart) {
-                    closeGazeStart = Date.now();
-                } else if (Date.now() - closeGazeStart > 1500) {
-                    hideVRInfoPanel();
-                }
-            } else {
-                closeGazeStart = 0;
-            }
-        }
-    }
-
-    function setupVRButton() {
-        var renderer = window.tourState.renderer;
-        if (!renderer) return;
-
-        var button = document.createElement('button');
-        button.id = 'vr-button';
-        button.style.display = 'none';
-
-        function showButton(textContent, enabled) {
-            button.textContent = textContent;
-            button.style.display = '';
-            button.disabled = !enabled;
-            if (!enabled) button.classList.add('unsupported');
-        }
-
-        if ('xr' in navigator) {
-            navigator.xr.isSessionSupported('immersive-vr').then(function (supported) {
-                if (supported) {
-                    showButton('ENTRER EN VR', true);
-
-                    button.onclick = function () {
-                        if (!window.tourState.isXRActive) {
-                            var sessionInit = { optionalFeatures: ['hand-tracking'] };
-                            navigator.xr.requestSession('immersive-vr', sessionInit).then(function (session) {
-                                renderer.xr.setSession(session);
-                            });
-                        } else {
-                            renderer.xr.getSession().end();
-                        }
-                    };
-
-                    renderer.xr.addEventListener('sessionstart', function () {
-                        button.textContent = 'QUITTER LA VR';
-                        window.tourState.isXRActive = true;
-                    });
-
-                    renderer.xr.addEventListener('sessionend', function () {
-                        button.textContent = 'ENTRER EN VR';
-                        window.tourState.isXRActive = false;
-                    });
-                } else {
-                    showButton('VR NON SUPPORTÉE', false);
-                }
-            }).catch(function () {
-                showButton('VR ERREUR', false);
-            });
-        } else {
-            showButton('NAVIGATEUR NON VR', false);
-        }
-
-        document.body.appendChild(button);
-    }
+        // setupVRButton() removed as VR functionality is removed
 
     function fullscreenElement() {
         return document.fullscreenElement ||
@@ -497,7 +384,7 @@
         updateZoomLevel();
         updateCompass();
         updateBackButton();
-        setupVRButton();
+        // setupVRButton() removed as VR functionality is removed
         setupFullscreen();
         setupShareButton();
 
@@ -521,14 +408,7 @@
         document.getElementById('info-close').addEventListener('click', hideInfoCard);
     }
 
-    function exitVR() {
-        var renderer = window.tourState.renderer;
-        if (!renderer) { return; }
-        var session = renderer.xr.getSession();
-        if (session) {
-            session.end();
-        }
-    }
+        // exitVR() removed as VR functionality is removed
 
     window.initUI = initUI;
     window.updateNavMenu = updateNavMenu;
@@ -541,8 +421,5 @@
     window.updateZoomLevel = updateZoomLevel;
     window.showInfoCard = showInfoCard;
     window.hideInfoCard = hideInfoCard;
-    window.showVRInfoPanel = showVRInfoPanel;
-    window.hideVRInfoPanel = hideVRInfoPanel;
-    window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
-    window.exitVR = exitVR;
+    // VR-specific functions removed: showVRInfoPanel, hideVRInfoPanel, updateVRInfoPanelFrame, exitVR
 })();

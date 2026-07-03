@@ -20,11 +20,8 @@
 
     var infoLayer;
     var infoElements = [];
-    var xrRaycaster = new THREE.Raycaster();
+    // Removed VR-specific raycasters and matrices as VR functionality is removed
     var tempMatrix = new THREE.Matrix4();
-    var ctrlMatrix = new THREE.Matrix4(); // [PERF] réutilisée chaque frame en VR, plus de "new" dans la boucle
-    var rayOrigin = new THREE.Vector3();  // [PERF] idem
-    var rayDir = new THREE.Vector3();     // [PERF] idem
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
     var GROUND_RADIUS = 3.5;
@@ -506,16 +503,12 @@
 
         updateGroundHotspots();
 
-        var isVR = window.tourState.isXRActive;
         if (hotspotGroup) {
             hotspotGroup.visible = true;
         }
 
         infoElements.forEach(function (entry) {
-            if (isVR) {
-                entry.element.classList.remove('visible');
-                return;
-            }
+            // VR-specific visibility handling removed - always show info hotspots in non-VR mode
             var vec = entry.hotspot.positionVector.clone();
             vec.project(window.tourState.camera);
 
@@ -539,19 +532,7 @@
     // utilisée). Parcourt tourState.xrControllers et retourne la première
     // manette valide avec une matrixWorld à jour. Fallback sur le contrôleur 0.
     // -------------------------------------------------------------------------
-    function getActiveController() {
-        var controllers = window.tourState.xrControllers;
-        if (!controllers || controllers.length === 0) {
-            return null;
-        }
-        // Parcourir pour trouver une manette avec matrixWorld valide
-        for (var i = 0; i < controllers.length; i += 1) {
-            if (controllers[i] && controllers[i].matrixWorld) {
-                return controllers[i];
-            }
-        }
-        return controllers[0] || null;
-    }
+        // getActiveController() removed as VR functionality is removed
 
     // -------------------------------------------------------------------------
     // updateGroundHotspots()
@@ -574,134 +555,49 @@
             return;
         }
 
-        // ── VR Mode : rayon depuis la manette active vers le sol ──
-        if (window.tourState.isXRActive) {
-            var controller = getActiveController();
-            if (!controller) {
-                // Pas de manette disponible : masquer le hotspot
-                groundHotspotEntry.hotspot = null;
-                groundHotspotEntry.ring.userData.hotspot = null;
-                groundHotspotEntry.arrow.userData.hotspot = null;
-                groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, 0, 0.12);
-                groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
-                groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
-                return;
+        // ── Mode souris classique (seul mode disponible après suppression du VR) ──
+        if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
+            mouseNDC.set(
+                (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
+                -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
+            );
+        }
+
+        groundRaycaster.setFromCamera(mouseNDC, camera);
+
+        if (
+            !window.tourState.isTransitioning &&
+            window.tourState.mouseSphereLat !== null &&
+            window.tourState.mouseSphereLat < -10 &&
+            groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
+        ) {
+            horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
+            if (horizontalLength > MAX_FOLLOW_RADIUS) {
+                scale = MAX_FOLLOW_RADIUS / horizontalLength;
+                groundPoint.x *= scale;
+                groundPoint.z *= scale;
+            } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
+                scale = MIN_FOLLOW_RADIUS / horizontalLength;
+                groundPoint.x *= scale;
+                groundPoint.z *= scale;
             }
 
-            // Extraire position et direction mondiales de la manette via matrixWorld
-            // [PERF] ctrlMatrix/rayOrigin/rayDir sont réutilisés (module scope),
-            // plus d'allocation par frame ici.
-            ctrlMatrix.identity().extractRotation(controller.matrixWorld);
-            rayOrigin.setFromMatrixPosition(controller.matrixWorld);
-            rayDir.set(0, 0, -1).applyMatrix4(ctrlMatrix).normalize();
+            nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
+            if (nearest) {
+                groundHotspotEntry.hotspot = nearest;
+                groundHotspotEntry.ring.position.copy(groundPoint);
+                groundHotspotEntry.arrow.position.copy(groundPoint);
+                groundHotspotEntry.arrow.position.y += 0.01;
+                groundHotspotEntry.ring.userData.hotspot = nearest;
+                groundHotspotEntry.arrow.userData.hotspot = nearest;
 
-            // Guard #1 : manette parallèle au sol (dir.y ≈ 0) → division par zéro imminente
-            if (Math.abs(rayDir.y) < 0.001) {
-                groundHotspotEntry.hotspot = null;
-                groundHotspotEntry.ring.userData.hotspot = null;
-                groundHotspotEntry.arrow.userData.hotspot = null;
-                groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, 0, 0.12);
-                groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
-                groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
-                return;
-            }
+                var dx = nearest.positionVector.x - groundPoint.x;
+                var dz = nearest.positionVector.z - groundPoint.z;
+                var angleToTarget = Math.atan2(-dx, -dz);
+                groundHotspotEntry.ring.rotation.y = angleToTarget;
+                groundHotspotEntry.arrow.rotation.y = angleToTarget;
 
-            // Calcul manuel de l'intersection rayon ↔ plan Y = -2
-            // Évite le crash silencieux de Ray.intersectPlane() quand dir.y ≈ 0
-            var t = (-2 - rayOrigin.y) / rayDir.y;
-
-            // Guard #2 : t < 0 → le sol est derrière la manette
-            if (t < 0) {
-                groundHotspotEntry.hotspot = null;
-                groundHotspotEntry.ring.userData.hotspot = null;
-                groundHotspotEntry.arrow.userData.hotspot = null;
-                groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, 0, 0.12);
-                groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
-                groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
-                return;
-            }
-
-            if (!window.tourState.isTransitioning) {
-                groundPoint.set(
-                    rayOrigin.x + rayDir.x * t,
-                    -2,
-                    rayOrigin.z + rayDir.z * t
-                );
-
-                horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
-                if (horizontalLength > MAX_FOLLOW_RADIUS) {
-                    scale = MAX_FOLLOW_RADIUS / horizontalLength;
-                    groundPoint.x *= scale;
-                    groundPoint.z *= scale;
-                } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
-                    scale = MIN_FOLLOW_RADIUS / horizontalLength;
-                    groundPoint.x *= scale;
-                    groundPoint.z *= scale;
-                }
-
-                nearest = nearestTransitionHotspot(groundPoint);
-                if (nearest) {
-                    groundHotspotEntry.hotspot = nearest;
-                    groundHotspotEntry.ring.position.copy(groundPoint);
-                    groundHotspotEntry.arrow.position.copy(groundPoint);
-                    groundHotspotEntry.arrow.position.y += 0.01;
-                    groundHotspotEntry.ring.userData.hotspot = nearest;
-                    groundHotspotEntry.arrow.userData.hotspot = nearest;
-
-                    var dx = nearest.positionVector.x - groundPoint.x;
-                    var dz = nearest.positionVector.z - groundPoint.z;
-                    var angleToTarget = Math.atan2(-dx, -dz);
-                    groundHotspotEntry.ring.rotation.y = angleToTarget;
-                    groundHotspotEntry.arrow.rotation.y = angleToTarget;
-
-                    targetOpacity = 0.85;
-                }
-            }
-        } else {
-            // ── Mode souris classique ──
-            if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
-                mouseNDC.set(
-                    (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
-                    -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
-                );
-            }
-
-            groundRaycaster.setFromCamera(mouseNDC, camera);
-
-            if (
-                !window.tourState.isTransitioning &&
-                window.tourState.mouseSphereLat !== null &&
-                window.tourState.mouseSphereLat < -10 &&
-                groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
-            ) {
-                horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
-                if (horizontalLength > MAX_FOLLOW_RADIUS) {
-                    scale = MAX_FOLLOW_RADIUS / horizontalLength;
-                    groundPoint.x *= scale;
-                    groundPoint.z *= scale;
-                } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
-                    scale = MIN_FOLLOW_RADIUS / horizontalLength;
-                    groundPoint.x *= scale;
-                    groundPoint.z *= scale;
-                }
-
-                nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
-                if (nearest) {
-                    groundHotspotEntry.hotspot = nearest;
-                    groundHotspotEntry.ring.position.copy(groundPoint);
-                    groundHotspotEntry.arrow.position.copy(groundPoint);
-                    groundHotspotEntry.arrow.position.y += 0.01;
-                    groundHotspotEntry.ring.userData.hotspot = nearest;
-                    groundHotspotEntry.arrow.userData.hotspot = nearest;
-
-                    var dx = nearest.positionVector.x - groundPoint.x;
-                    var dz = nearest.positionVector.z - groundPoint.z;
-                    var angleToTarget = Math.atan2(-dx, -dz);
-                    groundHotspotEntry.ring.rotation.y = angleToTarget;
-                    groundHotspotEntry.arrow.rotation.y = angleToTarget;
-
-                    targetOpacity = 0.85;
-                }
+                targetOpacity = 0.85;
             }
         }
 
@@ -792,100 +688,12 @@
     // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
     // "Quitter" soit intercepté par la flèche.
     // -------------------------------------------------------------------------
-    function handleXRSelect(event) {
-        var controller = event.target;
-
-        // Vérifier que le contrôleur a une matrixWorld valide
-        if (!controller || !controller.matrixWorld) {
-            return;
-        }
-
-        var tempMatrix = new THREE.Matrix4();
-        tempMatrix.identity().extractRotation(controller.matrixWorld);
-
-        var raycaster = new THREE.Raycaster();
-        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-        // ── Étape 1 : bouton Quitter VR ──────────────────────────────
-        if (window.vrExitButton && window.vrExitButton.visible) {
-            var exitHits = raycaster.intersectObject(window.vrExitButton, false);
-            if (exitHits.length > 0 && exitHits[0].distance < 3.0) {
-                if (window.doExitVR) { window.doExitVR(); }
-                return;
-            }
-        }
-
-        // ── Étape 2 : Récupérer TOUS les meshes de hotspots au sol ──
-        // On les prend depuis groundHotspotGroup (groupe parent)
-        var groundMeshes = [];
-        if (groundHotspotGroup) {
-            groundHotspotGroup.children.forEach(function (child) {
-                if (child.type === 'Mesh') {
-                    groundMeshes.push(child);
-                }
-            });
-        }
-
-        // Fallback : utiliser allGroundHotspotMeshes
-        if (groundMeshes.length === 0) {
-            groundMeshes = allGroundHotspotMeshes;
-        }
-
-        if (groundMeshes.length === 0) {
-            console.log('[XR] Aucun mesh hotspot trouvé');
-            return;
-        }
-
-        // ── Étape 3 : Raycasting sur les meshes ──
-        var hits = raycaster.intersectObjects(groundMeshes, false);
-
-        if (hits.length > 0) {
-            var hitObject = hits[0].object;
-            var hotspot = hitObject.userData.hotspot;
-
-            // Si le mesh n'a pas de hotspot, remonter dans le parent
-            if (!hotspot && hitObject.parent) {
-                hotspot = hitObject.parent.userData.hotspot;
-            }
-
-            // Si toujours pas, chercher dans les données du mesh parent
-            if (!hotspot && groundHotspotEntry) {
-                hotspot = groundHotspotEntry.hotspot;
-            }
-
-            if (hotspot && hotspot.type === 'transition' && window.triggerGSVTransition) {
-                console.log('[XR] 🎯 Hotspot détecté:', hotspot.label, '→', hotspot.target);
-                window.triggerGSVTransition(hotspot.target, bearingForHotspot(hotspot), { hotspot: hotspot });
-            } else {
-                console.log('[XR] Hotspot trouvé mais non valide:', hotspot);
-            }
-        } else {
-            // ── Pas de hit direct : essayer avec le hotspot actif ──
-            if (groundHotspotEntry && groundHotspotEntry.hotspot) {
-                var activeHotspot = groundHotspotEntry.hotspot;
-                if (activeHotspot.type === 'transition' && window.triggerGSVTransition) {
-                    // Vérifier si le rayon est proche du hotspot actif
-                    var hotspotPos = activeHotspot.positionVector;
-                    var distToHotspot = raycaster.ray.origin.distanceTo(hotspotPos);
-
-                    if (distToHotspot < 50) {
-                        console.log('[XR] 🎯 Hotspot actif détecté (fallback):', activeHotspot.label);
-                        window.triggerGSVTransition(activeHotspot.target, bearingForHotspot(activeHotspot), { hotspot: activeHotspot });
-                    }
-                }
-            }
-        }
-    }
+    // handleXRSelect() removed as VR functionality is removed
 
     window.initHotspots = initHotspots;
     window.updateHotspots = updateHotspots;
     window.onValidClick = onValidClick;
     window.onDoubleClick = onDoubleClick;
-    window.handleXRSelect = handleXRSelect;
     window.rebuildHotspots = initHotspots;
-    window.getActiveController = getActiveController;
-    window.getGroundHotspotMeshes = function () {
-        return allGroundHotspotMeshes.slice();
-    };
+    // VR-specific functions removed: handleXRSelect, getActiveController, getGroundHotspotMeshes
 })();
