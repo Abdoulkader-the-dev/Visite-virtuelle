@@ -9,7 +9,7 @@
     //  │  PROPRIÉTÉS D'UNE SCÈNE                                            │
     //  ├─────────────────────────────────────────────────────────────────────┤
     //  │  name           string   Nom affiché dans l'UI (menu, minimap)     │
-    //  │  image          string   Chemin vers la photo 360° (.JPG)          │
+    //  │  image          string   Chemin vers la photo 360° (.webp)          │
     //  │  defaultBearing number   Direction de vue PAR DÉFAUT (en degrés)   │
     //  │                         → vers où regarde la caméra au chargement   │
     //  │                         → 0 = nord, 90 = est, 180 = sud, 270 = ouest│
@@ -65,7 +65,7 @@
             // ── ENTRÉE ────────────────────────────────────────────────────────
             '12': {
                 name: 'Entrée',
-                image: './images/12.JPG',
+                image: './images/12.webp',
                 defaultBearing: 181.0,
                 minimapX: 50, minimapY: 85,
                 hotspots: [
@@ -78,7 +78,7 @@
             // ── SALLE D'ATTENTE ───────────────────────────────────────────────
             '13': {
                 name: "Salle d'attente",
-                image: './images/13.JPG',
+                image: './images/13.webp',
                 defaultBearing: 0,
                 minimapX: 35, minimapY: 65,
                 hotspots: [
@@ -91,7 +91,7 @@
             // ── ZONES 14 & 15 (liées à la salle d'attente) ───────────────────
             '14': {
                 name: 'Zone 14',
-                image: './images/14.JPG',
+                image: './images/14.webp',
                 defaultBearing: 0,
                 minimapX: 20, minimapY: 50,
                 hotspots: [
@@ -101,7 +101,7 @@
             },
             '15': {
                 name: 'Zone 15',
-                image: './images/15.JPG',
+                image: './images/15.webp',
                 defaultBearing: 0,
                 minimapX: 50, minimapY: 50,
                 hotspots: [
@@ -113,7 +113,7 @@
             // ── ZONE 16 ───────────────────────────────────────────────────────
             '16': {
                 name: 'Zone 16',
-                image: './images/16.JPG',
+                image: './images/16.webp',
                 defaultBearing: 177,
                 minimapX: 65, minimapY: 70,
                 hotspots: [
@@ -127,7 +127,7 @@
             // ── SALLE COLLABORATIVE ───────────────────────────────────────────
             '17': {
                 name: 'Salle collaborative',
-                image: './images/17.JPG',
+                image: './images/17.webp',
                 defaultBearing: 0,
                 minimapX: 30, minimapY: 40,
                 hotspots: [
@@ -143,7 +143,7 @@
             // ── ZONES 18-21 (salle collaborative) ─────────────────────────────
             '18': {
                 name: 'Zone 18',
-                image: './images/18.JPG',
+                image: './images/18.webp',
                 defaultBearing: 0,
                 minimapX: 15, minimapY: 28,
                 hotspots: [
@@ -155,7 +155,7 @@
             },
             '19': {
                 name: 'Zone 19',
-                image: './images/19.JPG',
+                image: './images/19.webp',
                 defaultBearing: 0,
                 minimapX: 25, minimapY: 20,
                 hotspots: [
@@ -167,7 +167,7 @@
             },
             '20': {
                 name: 'Zone 20',
-                image: './images/20.JPG',
+                image: './images/20.webp',
                 defaultBearing: 0,
                 minimapX: 40, minimapY: 15,
                 hotspots: [
@@ -179,7 +179,7 @@
             },
             '21': {
                 name: 'Zone 21',
-                image: './images/21.JPG',
+                image: './images/21.webp',
                 minimapX: 55, minimapY: 20,
                 hotspots: [
                     { position: { x: -419, y: -61, z: -264 }, type: 'transition', target: '17', bearing: 180, arrivalLon: 337, arrivalLat: 0, label: 'Retour salle collaborative' },
@@ -192,7 +192,7 @@
             // ── COULOIRE ──────────────────────────────────────────────────────
             '22': {
                 name: 'Couloire — début',
-                image: './images/22.JPG',
+                image: './images/22.webp',
                 minimapX: 70, minimapY: 40,
                 hotspots: [
                     { position: { x: -454, y: -187, z: -92 }, type: 'transition', target: '23', bearing: 0, arrivalLon: 179, arrivalLat: 0, label: 'Suite couloire' },
@@ -201,7 +201,7 @@
             },
             '23': {
                 name: 'Couloire — milieu',
-                image: './images/23.JPG',
+                image: './images/23.webp',
                 minimapX: 70, minimapY: 30,
                 hotspots: [
                     { position: { x: -467, y: -173, z: 35 }, type: 'transition', target: '24', bearing: 0, arrivalLon: 89, arrivalLat: 0, label: 'Suite couloire' },
@@ -211,7 +211,7 @@
             },
             '24': {
                 name: 'Couloire — section 3',
-                image: './images/24.JPG',
+                image: './images/24.webp',
                 minimapX: 70, minimapY: 20,
                 hotspots: [
                     { position: { x: -38, y: -153, z: 474 }, type: 'transition', target: '25', bearing: 0, arrivalLon: 207, arrivalLat: 0, label: 'Suite couloire' },
@@ -220,7 +220,7 @@
             },
             '25': {
                 name: 'Couloire — section 4',
-                image: './images/25.JPG',
+                image: './images/25.webp',
                 minimapX: 70, minimapY: 10,
                 hotspots: [
                     { position: { x: -433, y: -149, z: -199 }, type: 'transition', target: '26', bearing: 0, arrivalLon: 174, arrivalLat: 0, label: 'Suite couloire' },
@@ -230,7 +230,7 @@
             },
             '26': {
                 name: 'Couloire — fin',
-                image: './images/26.JPG',
+                image: './images/26.webp',
                 minimapX: 70, minimapY: 2,
                 hotspots: [
                     { position: { x: 483, y: -121, z: -38 }, type: 'transition', target: '25', bearing: 180, arrivalLon: 20, arrivalLat: 0, label: 'Retour couloire' }
@@ -240,7 +240,7 @@
             // ── DESIGN LAB ────────────────────────────────────────────────────
             '27': {
                 name: 'Design Lab',
-                image: './images/27.JPG',
+                image: './images/27.webp',
                 minimapX: 85, minimapY: 30,
                 hotspots: [
                     { position: { x: -3, y: -179, z: 466 }, type: 'transition', target: '28', bearing: 315, arrivalLon: 0, arrivalLat: 0, label: 'Design Lab 28' },
@@ -250,7 +250,7 @@
             },
             '28': {
                 name: 'Design Lab 28',
-                image: './images/28.JPG',
+                image: './images/28.webp',
                 minimapX: 90, minimapY: 22,
                 hotspots: [
                     { position: { x: 0, y: -20, z: 280 }, type: 'transition', target: '27', bearing: 180, arrivalLon: 262, arrivalLat: 0, label: 'Retour Design Lab' },
@@ -258,7 +258,7 @@
             },
             '29': {
                 name: 'Design Lab 29',
-                image: './images/29.JPG',
+                image: './images/29.webp',
                 minimapX: 95, minimapY: 30,
                 hotspots: [
                     { position: { x: 448, y: -216, z: -42 }, type: 'transition', target: '27', bearing: 180, arrivalLon: 88, arrivalLat: 0, label: 'Retour Design Lab' },
@@ -268,7 +268,7 @@
             },
             '30': {
                 name: 'Design Lab 30',
-                image: './images/30.JPG',
+                image: './images/30.webp',
                 minimapX: 90, minimapY: 38,
                 hotspots: [
                     { position: { x: 464, y: -178, z: 48 }, type: 'transition', target: '29', bearing: 45, arrivalLon: 352, arrivalLat: 0, label: 'Design Lab 29' },
@@ -276,7 +276,7 @@
             },
             '31': {
                 name: 'Design Lab 31',
-                image: './images/31.JPG',
+                image: './images/31.webp',
                 minimapX: 95, minimapY: 46,
                 hotspots: [
                     { position: { x: 458, y: -183, z: -74 }, type: 'transition', target: '29', bearing: 45, arrivalLon: 280, arrivalLat: 0, label: 'Design Lab 29' },
@@ -286,7 +286,7 @@
             // ── MAKERSPACE ────────────────────────────────────────────────────
             '32': {
                 name: 'Makerspace',
-                image: './images/32.JPG',
+                image: './images/32.webp',
                 minimapX: 55, minimapY: 10,
                 hotspots: [
                     { position: { x: -157, y: -192, z: 433 }, type: 'transition', target: '33', bearing: 315, arrivalLon: 12, arrivalLat: 0, label: 'Makerspace 33' },
@@ -297,7 +297,7 @@
             },
             '33': {
                 name: 'Makerspace 33',
-                image: './images/33.JPG',
+                image: './images/33.webp',
                 minimapX: 45, minimapY: 4,
                 hotspots: [
                     { position: { x: -390, y: -153, z: -272 }, type: 'transition', target: '32', bearing: 180, arrivalLon: 283, arrivalLat: 0, label: 'Retour Makerspace' },
@@ -306,7 +306,7 @@
             },
             '34': {
                 name: 'Makerspace 34',
-                image: './images/34.JPG',
+                image: './images/34.webp',
                 minimapX: 55, minimapY: 2,
                 hotspots: [
                     { position: { x: -400, y: -180, z: -238 }, type: 'transition', target: '32', bearing: 180, arrivalLon: 0, arrivalLat: 0, label: 'Retour Makerspace' },
@@ -315,7 +315,7 @@
             },
             '35': {
                 name: 'Makerspace 35',
-                image: './images/35.JPG',
+                image: './images/35.webp',
                 minimapX: 65, minimapY: 4,
                 hotspots: [
                     { position: { x: 387, y: -114, z: -295 }, type: 'transition', target: '32', bearing: 180, arrivalLon: 0, arrivalLat: 0, label: 'Retour Makerspace' },

@@ -11,7 +11,7 @@
     var textureCache = new Map(); // insertion order = ordre d'accès (LRU)
     var xrBaseReferenceSpace = null;
     var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
-        
+
     function isTextureInUse(texture) {
         var ts = window.tourState;
         if (!ts) return false;
@@ -25,15 +25,13 @@
         if (textureCache.size <= MAX_CACHED_TEXTURES) {
             return;
         }
-        // Map conserve l'ordre d'insertion : les premières entrées sont les
-        // plus anciennes (least recently used, puisqu'on ré-insère au get()).
         var it = textureCache.keys();
         var toCheck = Array.from(it);
         for (var i = 0; i < toCheck.length && textureCache.size > MAX_CACHED_TEXTURES; i += 1) {
             var key = toCheck[i];
             var texture = textureCache.get(key);
             if (!texture || isTextureInUse(texture)) {
-                continue; // jamais dispose une texture actuellement affichée
+                continue;
             }
             texture.dispose();
             textureCache.delete(key);
@@ -49,34 +47,41 @@
 
         var pos = viewerPose.transform.position;
 
-        // [PERF] XRRigidTransform doit être recréé (objet immuable côté
-        // navigateur), mais on évite au moins la création d'un objet
-        // littéral {x,y,z} intermédiaire séparé — impact mineur mais
-        // chaque allocation compte à 72-90 frames/seconde sur Quest.
         var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
         var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
         renderer.xr.setReferenceSpace(offsetReferenceSpace);
     }
 
+    // [FIX] Câblage manquant : la gâchette (select) des manettes n'était jamais
+    // reliée à handleXRSelect() de hotspots.js. Le bouton "Quitter VR" en 3D et
+    // le panneau info étaient injoignables en casque. On le fait ici, UNE SEULE
+    // fois par contrôleur, à l'initialisation (pas de risque de double-appel
+    // comme pour le thumbstick puisque ce bloc ne s'exécute qu'une fois).
     function setupXRControllers() {
         var renderer = window.tourState.renderer;
         if (!renderer) return;
 
-        // Initialize controller tracking
         var controllers = [];
         for (var i = 0; i < 2; i++) {
             var controller = renderer.xr.getController(i);
             controller.userData = { index: i };
             controllers.push(controller);
+
+            (function (ctrl) {
+                ctrl.addEventListener('selectstart', function () {
+                    if (window.handleXRSelect) {
+                        window.handleXRSelect(ctrl);
+                    }
+                });
+            })(controller);
         }
         window.tourState.xrControllers = controllers;
 
-        // Set up event listeners for controller connection/disconnection
-        renderer.xr.addEventListener('connected', function(event) {
+        renderer.xr.addEventListener('connected', function (event) {
             console.log('[XR] Controller connected:', event.data);
         });
 
-        renderer.xr.addEventListener('disconnected', function(event) {
+        renderer.xr.addEventListener('disconnected', function (event) {
             console.log('[XR] Controller disconnected:', event.data);
         });
 
@@ -103,15 +108,20 @@
         });
     }
 
+    // [OPTIMISATION] .webp testé en premier — bascule automatique et sans
+    // casser l'existant : tant que les .webp n'existent pas encore dans
+    // ./images/, le loader échoue silencieusement (onError) et retombe sur
+    // le .jpg/.JPG actuel. Le jour où tu convertis tes 24 panoramas en WebP
+    // (voir commande de conversion fournie), ils seront servis automatiquement
+    // sans toucher une ligne de config.js.
     function imageCandidates(path) {
-        var base = path.replace(/\.(jpg|jpeg)$/i, '');
-        return [base + '.jpg', base + '.JPG', base + '.jpeg', base + '.JPEG'];
+        var base = path.replace(/\.(jpg|jpeg|png|webp)$/i, '');
+        return [base + '.webp', base + '.jpg', base + '.JPG', base + '.jpeg', base + '.JPEG'];
     }
 
     function loadTexture(path) {
         if (textureCache.has(path)) {
             var cached = textureCache.get(path);
-            // Ré-insertion pour marquer comme "récemment utilisée" (ordre LRU)
             textureCache.delete(path);
             textureCache.set(path, cached);
             return Promise.resolve(cached);
@@ -135,14 +145,9 @@
                     function (texture) {
                         texture.minFilter = THREE.LinearFilter;
                         texture.magFilter = THREE.LinearFilter;
-                        // [PERF] mipmaps jamais utilisés avec LinearFilter (non-mipmap) —
-                        // les désactiver évite au GPU de générer une chaîne de mipmaps
-                        // complète pour rien à chaque upload de panorama haute résolution.
-                        // Gain direct sur le temps de chargement, surtout à l'entrée en VR.
                         texture.generateMipmaps = false;
-                        // encoding doit correspondre à renderer.outputEncoding = sRGBEncoding
                         texture.encoding = THREE.sRGBEncoding;
-                        texture.needsUpdate = true; // [CORRECTION GSV] force le upload GPU
+                        texture.needsUpdate = true;
                         textureCache.set(path, texture);
                         if (candidate !== path) {
                             textureCache.set(candidate, texture);
@@ -192,12 +197,6 @@
                 });
         }
 
-        // [FIX] Avec un cache LRU limité à MAX_CACHED_TEXTURES, précharger
-        // les 24 scènes ne sert plus à rien : la plupart seraient décodées
-        // puis aussitôt évincées avant même d'être vues — gaspillage pur de
-        // bande passante et de temps de décodage JPEG, exactement au moment
-        // où l'utilisateur essaie d'entrer en VR. On ne précharge que ce que
-        // le budget de cache peut réellement conserver.
         budget = Math.max(0, MAX_CACHED_TEXTURES - 1 - linkedIds.length);
 
         remainingIds = allIds.filter(function (id) {
@@ -232,7 +231,7 @@
     function createSphere() {
         var geo = new THREE.SphereGeometry(500, 60, 40);
         geo.scale(-1, 1, 1);
-        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1, depthWrite: true }); // [CORRECTION GSV] depthWrite explicite pour éviter z-fight
+        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1, depthWrite: true });
         return new THREE.Mesh(geo, mat);
     }
 
@@ -268,8 +267,12 @@
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
 
-            if (options.isInitialLoad && sceneConfig.defaultLon !== undefined) {
-                window.tourState.lon = ((sceneConfig.defaultLon % 360) + 360) % 360;
+            // [FIX] config.js définit `defaultBearing`, pas `defaultLon`.
+            // L'ancien code testait `sceneConfig.defaultLon` qui n'existe nulle
+            // part → le bearing par défaut de chaque scène n'était JAMAIS
+            // appliqué au chargement initial (toujours lon=0 sauf ?lon= en URL).
+            if (options.isInitialLoad && typeof sceneConfig.defaultBearing === 'number') {
+                window.tourState.lon = ((sceneConfig.defaultBearing % 360) + 360) % 360;
             } else if (typeof options.initialLon === 'number') {
                 window.tourState.lon = options.initialLon;
             }
@@ -316,7 +319,16 @@
         });
     }
 
+    // [FIX CONFORT VR] L'auto-rotation après 5s d'inactivité tournait la
+    // sphère MÊME en VR. En casque, une rotation de la scène sans rotation
+    // réelle de la tête est la cause n°1 de mal des transports (voir
+    // recommandations WebXR : mismatch vision/oreille interne). On coupe
+    // totalement l'auto-rotation dès que isXRActive est vrai.
     function updateAutoRotation() {
+        if (window.tourState.isXRActive) {
+            window.tourState.autoRotating = false;
+            return;
+        }
         if (
             Date.now() - window.tourState.lastInteractionTime > 5000 &&
             !window.tourState.isTransitioning &&
@@ -329,7 +341,15 @@
         }
     }
 
+    // [FIX PERF/COHÉRENCE VR] En VR, la pose de la caméra (position ET
+    // rotation) est entièrement pilotée par le casque via WebXRManager — tout
+    // camera.lookAt() manuel ici est écrasé au rendu et ne fait que gaspiller
+    // du calcul à 72-90 fps. On le saute proprement en mode XR.
     function updateCameraLookAt() {
+        if (window.tourState.isXRActive) {
+            return;
+        }
+
         var phi = (90 - window.tourState.lat) * Math.PI / 180;
         var theta = window.tourState.lon * Math.PI / 180;
 
@@ -345,8 +365,6 @@
         }
     }
 
-    
-    
     function renderFrame(timestamp, frame) {
         updateAutoRotation();
         updateCameraLookAt();
@@ -364,7 +382,6 @@
             window.updateVRUI();
         }
 
-        // Update XR pose if available
         if (frame && window.tourState.isXRActive) {
             applyXRPositionalOffset(frame);
         }
@@ -411,11 +428,7 @@
         var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
-        renderer.xr.enabled = true; // Enable WebXR
-        // Correction luminosité — les photos prises en intérieur apparaissent
-        // sombres sans ces deux paramètres. outputEncoding sRGB = couleurs fidèles.
-        // toneMapping LinearToneMapping + exposure = contrôle de la luminosité globale.
-        // Pour ajuster : changer renderer.toneMappingExposure (1.0 = neutre, >1 = plus clair)
+        renderer.xr.enabled = true;
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
@@ -458,7 +471,6 @@
         var startParams = getStartParams();
 
         loadScene(startParams.scene, { isInitialLoad: true }).then(function () {
-            // Si un lon explicite est passé en URL, il écrase le defaultLon
             if (startParams.lon !== 0) {
                 window.tourState.lon = startParams.lon;
             }

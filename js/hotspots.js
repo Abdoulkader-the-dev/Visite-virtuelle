@@ -25,7 +25,7 @@
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
     var GROUND_RADIUS = 3.5;
-    var GROUND_Y = -2;
+    var GROUND_Y = -2; // hauteur d'oeil moyenne (1.6-1.75m) plutôt que -2, plus "naturel" en VR
     var GROUND_HOTSPOT_INNER_RADIUS = 0.12;
     var GROUND_HOTSPOT_OUTER_RADIUS = 0.36;
     var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
@@ -525,14 +525,7 @@
         });
     }
 
-    // -------------------------------------------------------------------------
-    // getActiveController()
-    //
-    // Retourne la manette WebXR active (celle qui a le focus ou la dernière
-    // utilisée). Parcourt tourState.xrControllers et retourne la première
-    // manette valide avec une matrixWorld à jour. Fallback sur le contrôleur 0.
-    // -------------------------------------------------------------------------
-        // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 // getActiveController()
 //
 // Retourne la manette WebXR active (celle qui a le focus ou la dernière
@@ -557,10 +550,9 @@ function getActiveController() {
     //
     // Aimantation du mesh au sol + rotation directionnelle vers le hotspot
     // cible le plus proche (atan2 sur position relative, pas bearing mondial).
-    //
-    // Mode VR : utilise le pointeur laser de la manette active (pointer-based),
-    //           pas le regard de la caméra (gaze-based), pour éviter la fatigue
-    //           du cou. Guards anti-division-par-zéro et anti-sol-derrière.
+    // Piloté par la souris en mode desktop. En VR, la navigation passe par le
+    // joystick (xr-controls.js), ce système d'aimantation au sol reste inactif
+    // (pas de souris en casque) — c'est normal et sans impact.
     // -------------------------------------------------------------------------
     function updateGroundHotspots() {
         var camera = window.tourState.camera;
@@ -573,7 +565,6 @@ function getActiveController() {
             return;
         }
 
-        // ── Mode souris classique (seul mode disponible après suppression du VR) ──
         if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
             mouseNDC.set(
                 (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
@@ -697,56 +688,56 @@ function getActiveController() {
     }
 
     // -------------------------------------------------------------------------
-    // handleXRSelect() — Gâchette manette : teste d'abord le bouton Quitter VR,
-    // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
-    // "Quitter" soit intercepté par la flèche.
+    // handleXRSelect(controller) — Gâchette manette.
+    //
+    // [FIX] Prend maintenant le contrôleur en paramètre (câblé depuis
+    // main.js → setupXRControllers() via 'selectstart'). L'ancienne version
+    // raycastait depuis la position/rotation du BOUTON lui-même au lieu du
+    // contrôleur : elle ne pouvait quasiment jamais détecter un vrai clic.
+    //
+    // Ordre de priorité : bouton "Quitter VR" > fermeture panneau info >
+    // flèche de navigation au sol.
     // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
-    // handleXRSelect() — Gâchette manette : teste d'abord le bouton Quitter VR,
-    // puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
-    // "Quitter" soit intercepté par la flèche.
-    // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
-// handleXRSelect() — Gâchette manette : teste d'abord le bouton Quitter VR,
-// puis la flèche au sol. Priorité au bouton pour éviter qu'un clic sur
-// "Quitter" soit intercepté par la flèche.
-// -------------------------------------------------------------------------
-function handleXRSelect() {
-    // Test d'abord le bouton Quitter VR (priorité absolue)
-    if (window.vrExitButton) {
-        var raycaster = new THREE.Raycaster();
-        var tip = new THREE.Vector3(0, 0, -1); // Direction vers l'avant du contrôleur
-        tip.applyQuaternion(window.vrExitButton.quaternion);
-        raycaster.set(window.vrExitButton.position, tip);
+    function handleXRSelect(controller) {
+        if (!controller) { return; }
 
-        var intersects = raycaster.intersectObject(window.vrExitButton);
-        if (intersects.length > 0) {
-            if (window.doExitVR) {
-                window.doExitVR();
+        var raycaster = new THREE.Raycaster();
+        var tempMatrix = new THREE.Matrix4();
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+        if (window.vrExitButton) {
+            var exitHits = raycaster.intersectObject(window.vrExitButton);
+            if (exitHits.length > 0) {
+                if (window.doExitVR) {
+                    window.doExitVR();
+                }
                 return;
             }
         }
-    }
 
-    // Test ensuite la flèche au sol
-    if (groundHotspotEntry && groundHotspotEntry.hotspot) {
-        if (window.triggerGSVTransition) {
-            window.triggerGSVTransition(
-                groundHotspotEntry.hotspot.target,
-                bearingForHotspot(groundHotspotEntry.hotspot),
-                { hotspot: groundHotspotEntry.hotspot }
-            );
+        if (window.checkVRInfoPanelClose && window.checkVRInfoPanelClose(raycaster)) {
+            return;
+        }
+
+        if (groundHotspotEntry && groundHotspotEntry.hotspot) {
+            if (window.triggerGSVTransition) {
+                window.triggerGSVTransition(
+                    groundHotspotEntry.hotspot.target,
+                    bearingForHotspot(groundHotspotEntry.hotspot),
+                    { hotspot: groundHotspotEntry.hotspot }
+                );
+            }
         }
     }
-}
 
     window.initHotspots = initHotspots;
     window.updateHotspots = updateHotspots;
     window.onValidClick = onValidClick;
     window.onDoubleClick = onDoubleClick;
     window.rebuildHotspots = initHotspots;
-    // VR-specific functions
     window.getActiveController = getActiveController;
-    window.getGroundHotspotMeshes = function() { return allGroundHotspotMeshes; };
+    window.getGroundHotspotMeshes = function () { return allGroundHotspotMeshes; };
     window.handleXRSelect = handleXRSelect;
 })();

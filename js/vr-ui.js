@@ -5,10 +5,11 @@
     //  VR UI — Strict minimum : HUD avec bouton "Quitter VR" uniquement
     // =========================================================================
     //  Aucun menu, aucune grille de scènes, aucun panneau flottant.
-    //  La navigation se fait uniquement via la flèche 3D au sol (hotspots.js).
+    //  La navigation se fait uniquement via la flèche 3D au sol (hotspots.js)
+    //  et le joystick (xr-controls.js). Le "select" (gâchette) est câblé
+    //  depuis main.js → setupXRControllers() vers handleXRSelect (hotspots.js).
     // =========================================================================
 
-    // Polyfill for roundRect
     if (!CanvasRenderingContext2D.prototype.roundRect) {
         CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
             var r = typeof radii === 'number' ? radii : (radii || 0);
@@ -30,16 +31,10 @@
     var vrInfoMesh = null;
     var vrInfoVisible = false;
     var currentHotspot = null;
-    var textureLoader = null;
-    var hudEuler = new THREE.Euler();
-    var hudForward = new THREE.Vector3();
     var isVRSupported = false;
     var vrButtonElement = null;
     var isEnteringVR = false;
 
-    // -------------------------------------------------------------------------
-    //  checkVRSupport() — Vérifie si WebXR est supporté
-    // -------------------------------------------------------------------------
     function checkVRSupport() {
         if (!navigator.xr) {
             console.warn('[VR] WebXR non supporté');
@@ -64,9 +59,6 @@
         return true;
     }
 
-    // -------------------------------------------------------------------------
-    //  updateVRButtonState() — Met à jour l'état du bouton VR
-    // -------------------------------------------------------------------------
     function updateVRButtonState(available) {
         if (!vrButtonElement) {
             vrButtonElement = document.getElementById('vr-button');
@@ -92,16 +84,12 @@
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  buildVRUI() — Crée le HUD dans la scène mondiale (pas sur la caméra)
-    // -------------------------------------------------------------------------
     function buildVRUI() {
         if (vrUiGroup) { return; }
 
         vrUiGroup = new THREE.Group();
         vrUiGroup.name = 'vr-ui-hud';
 
-        // ── Bouton Quitter VR (petit, discret, en bas du champ de vision) ──
         var canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 64;
@@ -138,19 +126,20 @@
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
 
+        // [FIX] Sans cette ligne, hotspots.js → handleXRSelect() ne pouvait
+        // jamais tester le bouton "Quitter VR" (window.vrExitButton restait
+        // undefined en permanence) — le bouton était visible mais inerte.
+        window.vrExitButton = exitButton;
+
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrUiGroup);
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  showVRUI() / hideVRUI()
-    // -------------------------------------------------------------------------
     function showVRUI() {
         if (!vrUiGroup) { buildVRUI(); }
         if (vrUiGroup) {
             vrUiGroup.visible = true;
-            // Also update the VR button
             updateVRButtonState(true);
         }
     }
@@ -158,24 +147,17 @@
     function hideVRUI() {
         if (vrUiGroup) {
             vrUiGroup.visible = false;
-            // Also update the VR button
             updateVRButtonState(true);
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  initVRUI() — Initialisation du VR UI
-    // -------------------------------------------------------------------------
     function initVRUI() {
-        // Find the VR button
         vrButtonElement = document.getElementById('vr-button');
         if (vrButtonElement) {
-            // Remove any existing listeners
             var newButton = vrButtonElement.cloneNode(true);
             vrButtonElement.parentNode.replaceChild(newButton, vrButtonElement);
             vrButtonElement = newButton;
 
-            // Add click listener
             vrButtonElement.addEventListener('click', function (e) {
                 e.preventDefault();
                 toggleVR();
@@ -188,9 +170,6 @@
         checkVRSupport();
     }
 
-    // -------------------------------------------------------------------------
-    //  toggleVR() — Bascule entre mode VR et normal
-    // -------------------------------------------------------------------------
     function toggleVR() {
         if (isEnteringVR) return;
 
@@ -201,9 +180,6 @@
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  doExitVR() — Ferme proprement la session WebXR
-    // -------------------------------------------------------------------------
     function doExitVR() {
         var renderer = window.tourState.renderer;
         if (!renderer) {
@@ -238,9 +214,6 @@
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  enterVR() — Entre en mode VR
-    // -------------------------------------------------------------------------
     function enterVR() {
         if (isEnteringVR) return;
 
@@ -266,17 +239,24 @@
                 return;
             }
 
-            // Clear any existing session
             renderer.xr.setSession(null);
 
             navigator.xr.requestSession('immersive-vr', {
-                requiredFeatures: ['local-floor']
+                requiredFeatures: ['local']
             }).then(function (session) {
                 renderer.xr.setSession(session);
                 window.tourState.isXRActive = true;
                 isEnteringVR = false;
                 showVRUI();
                 updateVRButtonState(true);
+
+                // [OPTIMISATION PERF] Foveated rendering — réduit la charge GPU
+                // sur la périphérie des lentilles (voir recommandation Quest).
+                // Guard typeof car pas garanti disponible selon le build r128.
+                if (typeof renderer.xr.setFoveation === 'function') {
+                    renderer.xr.setFoveation(1);
+                }
+
                 console.log('[VR] Session démarrée');
             }).catch(function (err) {
                 console.error('[VR] Erreur démarrage session:', err);
@@ -291,9 +271,6 @@
         });
     }
 
-    // -------------------------------------------------------------------------
-    //  updateVRUI() — Repositionne le HUD devant la caméra chaque frame
-    // -------------------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
             return;
@@ -318,15 +295,11 @@
         vrUiGroup.rotateY(Math.PI);
         vrUiGroup.visible = true;
 
-        // Update VR info panel if visible
         if (vrInfoVisible && vrInfoMesh) {
             updateVRInfoPanelPosition();
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  buildVRInfoPanel() — Crée le panneau d'information VR
-    // -------------------------------------------------------------------------
     function buildVRInfoPanel() {
         vrInfoCanvas = document.createElement('canvas');
         vrInfoCanvas.width = 768;
@@ -357,9 +330,6 @@
         };
     }
 
-    // -------------------------------------------------------------------------
-    //  showVRInfoPanel() — Affiche le panneau d'information VR
-    // -------------------------------------------------------------------------
     function showVRInfoPanel(hotspot) {
         if (!vrInfoPanel || !window.tourState.isXRActive) {
             return;
@@ -369,23 +339,19 @@
         var canvas = vrInfoPanel.canvas;
         var ctx = canvas.getContext('2d');
 
-        // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Background
         ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
         ctx.beginPath();
         ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
         ctx.fill();
 
-        // Border
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
         ctx.stroke();
 
-        // Icon
         ctx.fillStyle = '#3B82F6';
         ctx.beginPath();
         ctx.arc(72, 72, 36, 0, Math.PI * 2);
@@ -397,13 +363,11 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(hotspot.icon || 'i', 72, 72);
 
-        // Title
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 38px system-ui';
         ctx.fillText(hotspot.title || 'Information', 130, 68);
 
-        // Description
         ctx.font = '28px system-ui';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         var words = (hotspot.description || '').split(' ');
@@ -421,7 +385,6 @@
         }
         ctx.fillText(line, 40, y);
 
-        // Close button
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.fillRect(canvas.width - 60, 20, 40, 40);
         ctx.fillStyle = '#ffffff';
@@ -437,9 +400,6 @@
         updateVRInfoPanelPosition();
     }
 
-    // -------------------------------------------------------------------------
-    //  hideVRInfoPanel() — Cache le panneau d'information VR
-    // -------------------------------------------------------------------------
     function hideVRInfoPanel() {
         if (vrInfoPanel) {
             vrInfoPanel.material.opacity = 0;
@@ -449,9 +409,6 @@
         currentHotspot = null;
     }
 
-    // -------------------------------------------------------------------------
-    //  updateVRInfoPanelPosition() — Positionne le panneau d'information VR
-    // -------------------------------------------------------------------------
     function updateVRInfoPanelPosition() {
         if (!vrInfoVisible || !vrInfoPanel || !window.tourState.isXRActive) {
             return;
@@ -476,22 +433,13 @@
         vrInfoPanel.mesh.rotateY(Math.PI);
     }
 
-    // -------------------------------------------------------------------------
-    //  updateVRInfoPanelFrame() — Met à jour le frame du panneau VR
-    // -------------------------------------------------------------------------
     function updateVRInfoPanelFrame() {
-        // This is called from the render loop to keep the panel updated
         if (vrInfoVisible && vrInfoPanel) {
             updateVRInfoPanelPosition();
         }
     }
 
-    // -------------------------------------------------------------------------
-    //  setupVRButton() — Configure le bouton VR (appelé depuis ui.js)
-    // -------------------------------------------------------------------------
     function setupVRButton() {
-        // Button is already set up in initVRUI
-        // This is just a placeholder for compatibility
         if (!vrButtonElement) {
             vrButtonElement = document.getElementById('vr-button');
             if (vrButtonElement) {
@@ -501,74 +449,32 @@
         updateVRButtonState(true);
     }
 
-    // -------------------------------------------------------------------------
-    //  setupXRControllers() — Gère les contrôleurs XR
-    // -------------------------------------------------------------------------
-    function setupXRControllers() {
-        var renderer = window.tourState.renderer;
-        if (!renderer || !renderer.xr) return;
-
-        // Remove existing listeners to avoid duplicates
-        renderer.xr.removeAllListeners('select');
-        renderer.xr.removeAllListeners('sessionstart');
-        renderer.xr.removeAllListeners('sessionend');
-
-        renderer.xr.addEventListener('sessionstart', function () {
-            window.tourState.isXRActive = true;
-            showVRUI();
-            updateVRButtonState(true);
-            console.log('[VR] Session started');
-        });
-
-        renderer.xr.addEventListener('sessionend', function () {
-            window.tourState.isXRActive = false;
-            isEnteringVR = false;
-            hideVRUI();
-            hideVRInfoPanel();
-            updateVRButtonState(true);
-            console.log('[VR] Session ended');
-        });
-
-        renderer.xr.addEventListener('select', function (event) {
-            var controller = event.target;
-            if (!controller || !exitButton) return;
-
-            var raycaster = new THREE.Raycaster();
-            var tempMatrix = new THREE.Matrix4();
-            tempMatrix.identity().extractRotation(controller.matrixWorld);
-            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-            var intersects = raycaster.intersectObject(exitButton);
-            if (intersects.length > 0) {
-                doExitVR();
-                return;
+    // [FIX] Remplace l'ancien check "clic sur panneau info" fait via un
+    // deuxième listener 'select' redondant (jamais câblé de toute façon, et
+    // qui contenait `renderer.xr.removeAllListeners(...)`, une méthode qui
+    // N'EXISTE PAS sur THREE.EventDispatcher en r128 — appel qui aurait
+    // planté). Maintenant appelé UNE fois depuis handleXRSelect (hotspots.js)
+    // avec le raycaster déjà construit depuis le bon contrôleur.
+    function checkVRInfoPanelClose(raycaster) {
+        if (!vrInfoVisible || !vrInfoPanel) {
+            return false;
+        }
+        var intersects = raycaster.intersectObject(vrInfoPanel.mesh);
+        if (intersects.length === 0) {
+            return false;
+        }
+        var uv = intersects[0].uv;
+        if (uv) {
+            var canvas = vrInfoPanel.canvas;
+            var x = uv.x * canvas.width;
+            var y = (1 - uv.y) * canvas.height;
+            if (x > canvas.width - 60 && x < canvas.width - 20 && y > 20 && y < 60) {
+                hideVRInfoPanel();
             }
-
-            // Check for info panel click
-            if (vrInfoVisible && vrInfoPanel) {
-                var panelIntersects = raycaster.intersectObject(vrInfoPanel.mesh);
-                if (panelIntersects.length > 0) {
-                    // Check if close button was clicked
-                    var uv = panelIntersects[0].uv;
-                    if (uv) {
-                        var canvas = vrInfoPanel.canvas;
-                        var x = uv.x * canvas.width;
-                        var y = (1 - uv.y) * canvas.height;
-                        // Close button area (top-right corner)
-                        if (x > canvas.width - 60 && x < canvas.width - 20 &&
-                            y > 20 && y < 60) {
-                            hideVRInfoPanel();
-                        }
-                    }
-                }
-            }
-        });
+        }
+        return true; // le rayon touche le panneau : on absorbe le clic ici
     }
 
-    // -------------------------------------------------------------------------
-    //  roundedCardCanvas() — Crée un canvas pour les cartes d'information VR
-    // -------------------------------------------------------------------------
     function roundedCardCanvas(hotspot) {
         var canvas = document.createElement('canvas');
         canvas.width = 768;
@@ -629,9 +535,6 @@
         return canvas;
     }
 
-    // -------------------------------------------------------------------------
-    //  getVRButton() — Retourne le bouton VR
-    // -------------------------------------------------------------------------
     function getVRButton() {
         if (!vrButtonElement) {
             vrButtonElement = document.getElementById('vr-button');
@@ -639,7 +542,18 @@
         return vrButtonElement;
     }
 
-    // Exposer les fonctions globalement
+    // [ROBUSTESSE] Si WebXR échoue en interne après le démarrage de la
+    // session (ex: reference space non supporté par le device/émulateur),
+    // on ne le laisse pas planter en silence — on sort proprement du mode VR
+    // au lieu de laisser l'utilisateur bloqué dans une session cassée.
+    window.addEventListener('unhandledrejection', function (event) {
+        var reason = event.reason && event.reason.message ? event.reason.message : '';
+        if (reason.indexOf('reference space') !== -1 && window.tourState.isXRActive) {
+            console.error('[VR] Reference space non supporté, sortie forcée du mode VR:', reason);
+            doExitVR();
+        }
+    });
+
     window.loadScene = window.loadScene || function () { console.warn('loadScene not defined'); };
     window.preloadAllScenes = window.preloadAllScenes || function () { };
     window.updateCameraLookAt = window.updateCameraLookAt || function () { };
@@ -657,7 +571,7 @@
     window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
     window.setupVRButton = setupVRButton;
     window.exitVR = doExitVR;
-    window.setupXRControllers = setupXRControllers;
+    window.checkVRInfoPanelClose = checkVRInfoPanelClose;
     window.roundedCardCanvas = roundedCardCanvas;
     window.getVRButton = getVRButton;
     window.checkVRSupport = checkVRSupport;
