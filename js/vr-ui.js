@@ -126,9 +126,6 @@
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
 
-        // [FIX] Sans cette ligne, hotspots.js → handleXRSelect() ne pouvait
-        // jamais tester le bouton "Quitter VR" (window.vrExitButton restait
-        // undefined en permanence) — le bouton était visible mais inerte.
         window.vrExitButton = exitButton;
 
         if (window.tourState && window.tourState.scene) {
@@ -214,6 +211,9 @@
         }
     }
 
+    // ==============================================================
+    //  [FIX CRITIQUE] 'local-floor' pour avoir la hauteur des yeux
+    // ==============================================================
     function enterVR() {
         if (isEnteringVR) return;
 
@@ -239,15 +239,11 @@
                 return;
             }
 
-            // [FIX] Sans cette ligne, WebXRManager demande 'local-floor' par
-            // défaut en interne (référence par défaut de Three.js r128), une
-            // feature jamais négociée dans requestSession() ci-dessous puisqu'on
-            // ne demande que 'local' → requestReferenceSpace('local-floor')
-            // rejette silencieusement → la session meurt aussitôt sur le Quest.
-            renderer.xr.setReferenceSpaceType('local');
+            // [FIX] Utiliser 'local-floor' pour la hauteur des yeux
+            renderer.xr.setReferenceSpaceType('local-floor');
 
             navigator.xr.requestSession('immersive-vr', {
-                requiredFeatures: ['local']
+                requiredFeatures: ['local-floor']
             }).then(function (session) {
                 renderer.xr.setSession(session).then(function () {
                     window.tourState.isXRActive = true;
@@ -259,9 +255,9 @@
                         renderer.xr.setFoveation(1);
                     }
 
-                    console.log('[VR] Session démarrée');
+                    console.log('[VR] Session démarrée avec local-floor');
                 }).catch(function (err) {
-                    console.error('[VR] Erreur setSession (reference space):', err);
+                    console.error('[VR] Erreur setSession:', err);
                     isEnteringVR = false;
                     window.tourState.isXRActive = false;
                     updateVRButtonState(true);
@@ -458,12 +454,6 @@
         updateVRButtonState(true);
     }
 
-    // [FIX] Remplace l'ancien check "clic sur panneau info" fait via un
-    // deuxième listener 'select' redondant (jamais câblé de toute façon, et
-    // qui contenait `renderer.xr.removeAllListeners(...)`, une méthode qui
-    // N'EXISTE PAS sur THREE.EventDispatcher en r128 — appel qui aurait
-    // planté). Maintenant appelé UNE fois depuis handleXRSelect (hotspots.js)
-    // avec le raycaster déjà construit depuis le bon contrôleur.
     function checkVRInfoPanelClose(raycaster) {
         if (!vrInfoVisible || !vrInfoPanel) {
             return false;
@@ -481,7 +471,7 @@
                 hideVRInfoPanel();
             }
         }
-        return true; // le rayon touche le panneau : on absorbe le clic ici
+        return true;
     }
 
     function roundedCardCanvas(hotspot) {
@@ -551,22 +541,20 @@
         return vrButtonElement;
     }
 
-    // [ROBUSTESSE] Si WebXR échoue en interne après le démarrage de la
-    // session (ex: reference space non supporté par le device/émulateur),
-    // on ne le laisse pas planter en silence — on sort proprement du mode VR
-    // au lieu de laisser l'utilisateur bloqué dans une session cassée.
+    // ==============================================================
+    //  Gestion des erreurs de référence space
+    // ==============================================================
     window.addEventListener('unhandledrejection', function (event) {
         var reason = event.reason && event.reason.message ? event.reason.message : '';
         if (reason.indexOf('reference space') !== -1 && window.tourState.isXRActive) {
-            console.error('[VR] Reference space non supporté, sortie forcée du mode VR:', reason);
+            console.error('[VR] Reference space non supporté, sortie forcée:', reason);
             doExitVR();
         }
     });
 
-    window.loadScene = window.loadScene || function () { console.warn('loadScene not defined'); };
-    window.preloadAllScenes = window.preloadAllScenes || function () { };
-    window.updateCameraLookAt = window.updateCameraLookAt || function () { };
-    window.createSphere = window.createSphere || function () { };
+    // ==============================================================
+    //  EXPOSE
+    // ==============================================================
     window.updateVRUI = updateVRUI;
     window.initVRUI = initVRUI;
     window.buildVRUI = buildVRUI;
@@ -585,5 +573,4 @@
     window.getVRButton = getVRButton;
     window.checkVRSupport = checkVRSupport;
     window.updateVRButtonState = updateVRButtonState;
-
 })();

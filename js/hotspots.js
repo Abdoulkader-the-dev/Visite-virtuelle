@@ -20,12 +20,11 @@
 
     var infoLayer;
     var infoElements = [];
-    // Removed VR-specific raycasters and matrices as VR functionality is removed
     var tempMatrix = new THREE.Matrix4();
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
     var GROUND_RADIUS = 3.5;
-    var GROUND_Y = -2; // hauteur d'oeil moyenne (1.6-1.75m) plutôt que -2, plus "naturel" en VR
+    var GROUND_Y = -2;
     var GROUND_HOTSPOT_INNER_RADIUS = 0.12;
     var GROUND_HOTSPOT_OUTER_RADIUS = 0.36;
     var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
@@ -129,12 +128,6 @@
         clearPulseCircles();
     }
 
-    // -------------------------------------------------------------------------
-    // createPulseCircleTexture()
-    //
-    // Génère une CanvasTexture réutilisable : disque rouge vif translucide
-    // avec contours adoucis (radial gradient). Taille 128×128, cercle centré.
-    // -------------------------------------------------------------------------
     function createPulseCircleTexture() {
         if (pulseCircleTexture) {
             return pulseCircleTexture;
@@ -149,7 +142,6 @@
         var cy = size / 2;
         var r = size / 2 - 2;
 
-        // Radial gradient : centre opaque → bord adouci
         var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
         grad.addColorStop(0, 'rgba(220, 38, 38, 0.7)');
         grad.addColorStop(0.6, 'rgba(220, 38, 38, 0.55)');
@@ -161,7 +153,6 @@
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // Point central net pour un ancrage visuel précis
         ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
@@ -171,12 +162,6 @@
         return pulseCircleTexture;
     }
 
-    // -------------------------------------------------------------------------
-    // clearPulseCircles()
-    //
-    // Supprime tous les cercles de positionnement : tue les tweens GSAP,
-    // retire les meshes de la scène, dispose geometry + material.
-    // -------------------------------------------------------------------------
     function clearPulseCircles() {
         pulseCircles.forEach(function (entry) {
             if (entry.tween) {
@@ -193,36 +178,16 @@
         pulseCircles = [];
     }
 
-    // -------------------------------------------------------------------------
-    // projectHotspotToGround(position)
-    //
-    // Projette une position 3D de hotspot sur le plan Y = -2 (GROUND_Y).
-    // La caméra étant à l'origine (0,0,0.001), on trace un rayon depuis
-    // l'origine vers le hotspot et on calcule l'intersection avec Y = -2.
-    //
-    // Résultat : un point au sol qui représente "l'endroit vers lequel
-    // le hotspot pointe vu d'en haut", exactement là où l'utilisateur
-    // s'attend à voir un indicateur de destination.
-    // -------------------------------------------------------------------------
     function projectHotspotToGround(position) {
         var dir = new THREE.Vector3(position.x, position.y, position.z).normalize();
-        // Rayon depuis l'origine (0,0,0) vers la direction du hotspot
-        // Intersection avec plan Y = -2 : t = GROUND_Y / dir.y
-        // Mais dir.y peut être 0 ou positif (hotspot au-dessus de l'horizon)
-        // On utilise la projection horizontale : on ramène le point sur Y = -2
-        // en conservant le ratio x/z de la direction horizontale.
         var horizontalDist = Math.sqrt(position.x * position.x + position.z * position.z);
         if (horizontalDist < 0.001) {
-            // Hotspot vertical (au-dessus/en-dessous) : placer à l'origine
             return new THREE.Vector3(0, GROUND_Y, 0);
         }
-        // Facteur d'échelle pour amener y à GROUND_Y
         var t = GROUND_Y / dir.y;
-        // Si t < 0, le hotspot est derrière/en haut — on clamp
         if (t < 0) {
             t = Math.abs(t);
         }
-        // Clamp à une distance raisonnable pour rester visible
         var maxGroundDist = 200;
         var px = dir.x * t;
         var pz = dir.z * t;
@@ -235,15 +200,6 @@
         return new THREE.Vector3(px, GROUND_Y, pz);
     }
 
-    // -------------------------------------------------------------------------
-    // createPulseCircles()
-    //
-    // Crée un cercle rouge couché au sol pour chaque hotspot de transition
-    // de la scène courante. La position au sol est obtenue en projetant
-    // les coordonnées 3D du hotspot sur le plan Y = -2 depuis l'origine.
-    // Animation GSAP pulse : scale 1→1.3 + opacity pulse,
-    // yoyo infini, déphasage pour éviter la synchro parfaite.
-    // -------------------------------------------------------------------------
     function createPulseCircles() {
         clearPulseCircles();
 
@@ -274,7 +230,6 @@
 
             window.tourState.scene.add(mesh);
 
-            // Déphasage pour éviter que tous les cercles pulsent en même temps
             var delay = index * 0.15;
 
             var tween = gsap.to(mesh.scale, {
@@ -287,9 +242,8 @@
                 repeat: -1,
                 delay: delay,
                 onUpdate: function () {
-                    // Pulse d'opacité synchronisé : 0.6 → 0.35
                     var s = mesh.scale.x;
-                    var normalized = (s - 1.0) / 0.3; // 0→1
+                    var normalized = (s - 1.0) / 0.3;
                     mesh.material.opacity = 0.6 - normalized * 0.25;
                 }
             });
@@ -321,7 +275,7 @@
         hotspotMesh = new THREE.Mesh(ringGeo, ringMat);
         hotspotMesh.position.set(0, GROUND_Y, 0);
         hotspotMesh.renderOrder = 5;
-        hotspotMesh.userData.isGroundHotspot = true; // 🔥 MARQUEUR POUR VR
+        hotspotMesh.userData.isGroundHotspot = true;
 
         arrowShape = new THREE.Shape();
         arrowShape.moveTo(0, 0.3 * GROUND_HOTSPOT_ARROW_SCALE);
@@ -342,12 +296,11 @@
         arrowMesh = new THREE.Mesh(arrowGeo, arrowMat);
         arrowMesh.position.set(0, GROUND_Y + 0.01, 0);
         arrowMesh.renderOrder = 6;
-        arrowMesh.userData.isGroundHotspot = true; // 🔥 MARQUEUR POUR VR
+        arrowMesh.userData.isGroundHotspot = true;
 
         groundHotspotGroup.add(hotspotMesh);
         groundHotspotGroup.add(arrowMesh);
 
-        // 🔥 IMPORTANT : s'assurer que le groupe est dans la scène
         if (window.tourState.scene && !window.tourState.scene.children.includes(groundHotspotGroup)) {
             window.tourState.scene.add(groundHotspotGroup);
         }
@@ -368,7 +321,6 @@
 
         clearGroundHotspots();
 
-        // Nettoyage des anciens marqueurs 3D
         if (window.tourState.scene) {
             window.tourState.scene.remove(hotspotGroup);
         }
@@ -434,7 +386,6 @@
 
         createPulseCircles();
 
-        // ---- Flèches directionnelles ----
         var fwdBtn = document.getElementById('dir-arrow-fwd');
         var bwdBtn = document.getElementById('dir-arrow-bwd');
 
@@ -496,6 +447,89 @@
         return best;
     }
 
+    // ==============================================================
+    //  VR: Get headset gaze direction on ground plane
+    // ==============================================================
+    function getVRGazeGroundPosition() {
+        var camera = window.tourState.camera;
+        if (!camera) return null;
+
+        var gazeDir = new THREE.Vector3(0, 0, -1);
+        gazeDir.applyQuaternion(camera.quaternion);
+        gazeDir.y = 0;
+        gazeDir.normalize();
+
+        var groundDistance = 3.5;
+        var pos = new THREE.Vector3(
+            gazeDir.x * groundDistance,
+            GROUND_Y,
+            gazeDir.z * groundDistance
+        );
+
+        var hLen = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
+        if (hLen > MAX_FOLLOW_RADIUS) {
+            var s = MAX_FOLLOW_RADIUS / hLen;
+            pos.x *= s;
+            pos.z *= s;
+        } else if (hLen < MIN_FOLLOW_RADIUS && hLen > 0.01) {
+            var s2 = MIN_FOLLOW_RADIUS / hLen;
+            pos.x *= s2;
+            pos.z *= s2;
+        }
+
+        return pos;
+    }
+
+    // ==============================================================
+    //  VR: Move ground arrow with joystick
+    // ==============================================================
+    function moveGroundArrowWithJoystick(x, y) {
+        if (!groundHotspotEntry || !window.tourState.isXRActive) return;
+
+        var camera = window.tourState.camera;
+        var forward = new THREE.Vector3(0, 0, -1);
+        forward.applyQuaternion(camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+
+        var right = new THREE.Vector3(1, 0, 0);
+        right.applyQuaternion(camera.quaternion);
+        right.y = 0;
+        right.normalize();
+
+        var speed = 0.05;
+        var move = new THREE.Vector3()
+            .addScaledVector(forward, -y * speed)
+            .addScaledVector(right, x * speed);
+
+        var currentPos = groundHotspotEntry.ring.position;
+        var newPos = currentPos.clone().add(move);
+
+        var hLen = Math.sqrt(newPos.x * newPos.x + newPos.z * newPos.z);
+        if (hLen > MAX_FOLLOW_RADIUS) {
+            var s = MAX_FOLLOW_RADIUS / hLen;
+            newPos.x *= s;
+            newPos.z *= s;
+        }
+
+        groundHotspotEntry.ring.position.copy(newPos);
+        groundHotspotEntry.arrow.position.copy(newPos);
+        groundHotspotEntry.arrow.position.y += 0.01;
+
+        var nearest = nearestTransitionHotspot(new THREE.Vector3(newPos.x, 0, newPos.z));
+        if (nearest) {
+            groundHotspotEntry.hotspot = nearest;
+            groundHotspotEntry.ring.userData.hotspot = nearest;
+            groundHotspotEntry.arrow.userData.hotspot = nearest;
+
+            var dx = nearest.positionVector.x - newPos.x;
+            var dz = nearest.positionVector.z - newPos.z;
+            var angle = Math.atan2(-dx, -dz);
+            groundHotspotEntry.ring.rotation.y = angle;
+            groundHotspotEntry.arrow.rotation.y = angle;
+        }
+    }
+
     function updateHotspots() {
         if (!window.tourState.camera) {
             return;
@@ -508,7 +542,6 @@
         }
 
         infoElements.forEach(function (entry) {
-            // VR-specific visibility handling removed - always show info hotspots in non-VR mode
             var vec = entry.hotspot.positionVector.clone();
             vec.project(window.tourState.camera);
 
@@ -525,88 +558,90 @@
         });
     }
 
-// -------------------------------------------------------------------------
-// getActiveController()
-//
-// Retourne la manette WebXR active (celle qui a le focus ou la dernière
-// utilisée). Parcourt tourState.xrControllers et retourne la première
-// manette valide avec une matrixWorld à jour. Fallback sur le contrôleur 0.
-// -------------------------------------------------------------------------
-function getActiveController() {
-    var controllers = window.tourState.xrControllers;
-    if (!controllers) { return null; }
-
-    for (var i = 0; i < controllers.length; i++) {
-        var controller = controllers[i];
-        if (controller && controller.matrixWorld) {
-            return controller;
-        }
-    }
-    return controllers.length > 0 ? controllers[0] : null;
-}
-
-    // -------------------------------------------------------------------------
-    // updateGroundHotspots()
-    //
-    // Aimantation du mesh au sol + rotation directionnelle vers le hotspot
-    // cible le plus proche (atan2 sur position relative, pas bearing mondial).
-    // Piloté par la souris en mode desktop. En VR, la navigation passe par le
-    // joystick (xr-controls.js), ce système d'aimantation au sol reste inactif
-    // (pas de souris en casque) — c'est normal et sans impact.
-    // -------------------------------------------------------------------------
+    // ==============================================================
+    //  UPDATE GROUND HOTSPOTS - VR + 2D
+    // ==============================================================
     function updateGroundHotspots() {
         var camera = window.tourState.camera;
         var targetOpacity = 0;
-        var horizontalLength;
-        var scale;
-        var nearest;
+        var nearest = null;
 
         if (!camera || !groundHotspotEntry) {
             return;
         }
 
-        if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
-            mouseNDC.set(
-                (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
-                -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
-            );
+        // ==============================================================
+        //  VR MODE: Use headset gaze direction
+        // ==============================================================
+        if (window.tourState.isXRActive) {
+            var gazePos = getVRGazeGroundPosition();
+            if (gazePos) {
+                nearest = nearestTransitionHotspot(new THREE.Vector3(gazePos.x, 0, gazePos.z));
+                if (nearest) {
+                    groundHotspotEntry.hotspot = nearest;
+                    groundHotspotEntry.ring.position.copy(gazePos);
+                    groundHotspotEntry.arrow.position.copy(gazePos);
+                    groundHotspotEntry.arrow.position.y += 0.01;
+                    groundHotspotEntry.ring.userData.hotspot = nearest;
+                    groundHotspotEntry.arrow.userData.hotspot = nearest;
+
+                    var dx = nearest.positionVector.x - gazePos.x;
+                    var dz = nearest.positionVector.z - gazePos.z;
+                    var angleToTarget = Math.atan2(-dx, -dz);
+                    groundHotspotEntry.ring.rotation.y = angleToTarget;
+                    groundHotspotEntry.arrow.rotation.y = angleToTarget;
+
+                    targetOpacity = 0.85;
+                }
+            }
         }
-
-        groundRaycaster.setFromCamera(mouseNDC, camera);
-
-        if (
-            !window.tourState.isTransitioning &&
-            window.tourState.mouseSphereLat !== null &&
-            window.tourState.mouseSphereLat < -10 &&
-            groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
-        ) {
-            horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
-            if (horizontalLength > MAX_FOLLOW_RADIUS) {
-                scale = MAX_FOLLOW_RADIUS / horizontalLength;
-                groundPoint.x *= scale;
-                groundPoint.z *= scale;
-            } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
-                scale = MIN_FOLLOW_RADIUS / horizontalLength;
-                groundPoint.x *= scale;
-                groundPoint.z *= scale;
+        // ==============================================================
+        //  2D MODE: Use mouse position
+        // ==============================================================
+        else {
+            if (typeof window.tourState.lastMouseX === 'number' && typeof window.tourState.lastMouseY === 'number') {
+                mouseNDC.set(
+                    (window.tourState.lastMouseX / window.innerWidth) * 2 - 1,
+                    -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1
+                );
             }
 
-            nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
-            if (nearest) {
-                groundHotspotEntry.hotspot = nearest;
-                groundHotspotEntry.ring.position.copy(groundPoint);
-                groundHotspotEntry.arrow.position.copy(groundPoint);
-                groundHotspotEntry.arrow.position.y += 0.01;
-                groundHotspotEntry.ring.userData.hotspot = nearest;
-                groundHotspotEntry.arrow.userData.hotspot = nearest;
+            groundRaycaster.setFromCamera(mouseNDC, camera);
 
-                var dx = nearest.positionVector.x - groundPoint.x;
-                var dz = nearest.positionVector.z - groundPoint.z;
-                var angleToTarget = Math.atan2(-dx, -dz);
-                groundHotspotEntry.ring.rotation.y = angleToTarget;
-                groundHotspotEntry.arrow.rotation.y = angleToTarget;
+            if (
+                !window.tourState.isTransitioning &&
+                window.tourState.mouseSphereLat !== null &&
+                window.tourState.mouseSphereLat < -10 &&
+                groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)
+            ) {
+                var horizontalLength = Math.sqrt(groundPoint.x * groundPoint.x + groundPoint.z * groundPoint.z);
+                if (horizontalLength > MAX_FOLLOW_RADIUS) {
+                    var scale = MAX_FOLLOW_RADIUS / horizontalLength;
+                    groundPoint.x *= scale;
+                    groundPoint.z *= scale;
+                } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0) {
+                    var scale2 = MIN_FOLLOW_RADIUS / horizontalLength;
+                    groundPoint.x *= scale2;
+                    groundPoint.z *= scale2;
+                }
 
-                targetOpacity = 0.85;
+                nearest = nearestTransitionHotspot(window.tourState.mouseSpherePoint || groundPoint);
+                if (nearest) {
+                    groundHotspotEntry.hotspot = nearest;
+                    groundHotspotEntry.ring.position.copy(groundPoint);
+                    groundHotspotEntry.arrow.position.copy(groundPoint);
+                    groundHotspotEntry.arrow.position.y += 0.01;
+                    groundHotspotEntry.ring.userData.hotspot = nearest;
+                    groundHotspotEntry.arrow.userData.hotspot = nearest;
+
+                    var dx2 = nearest.positionVector.x - groundPoint.x;
+                    var dz2 = nearest.positionVector.z - groundPoint.z;
+                    var angleToTarget2 = Math.atan2(-dx2, -dz2);
+                    groundHotspotEntry.ring.rotation.y = angleToTarget2;
+                    groundHotspotEntry.arrow.rotation.y = angleToTarget2;
+
+                    targetOpacity = 0.85;
+                }
             }
         }
 
@@ -687,17 +722,13 @@ function getActiveController() {
         return null;
     }
 
-    // -------------------------------------------------------------------------
-    // handleXRSelect(controller) — Gâchette manette.
-    //
-    // [FIX] Prend maintenant le contrôleur en paramètre (câblé depuis
-    // main.js → setupXRControllers() via 'selectstart'). L'ancienne version
-    // raycastait depuis la position/rotation du BOUTON lui-même au lieu du
-    // contrôleur : elle ne pouvait quasiment jamais détecter un vrai clic.
-    //
-    // Ordre de priorité : bouton "Quitter VR" > fermeture panneau info >
-    // flèche de navigation au sol.
-    // -------------------------------------------------------------------------
+    function getVRGazeHotspot() {
+        if (!window.tourState.isXRActive || !groundHotspotEntry) {
+            return null;
+        }
+        return groundHotspotEntry.hotspot;
+    }
+
     function handleXRSelect(controller) {
         if (!controller) { return; }
 
@@ -721,23 +752,37 @@ function getActiveController() {
             return;
         }
 
-        if (groundHotspotEntry && groundHotspotEntry.hotspot) {
-            if (window.triggerGSVTransition) {
-                window.triggerGSVTransition(
-                    groundHotspotEntry.hotspot.target,
-                    bearingForHotspot(groundHotspotEntry.hotspot),
-                    { hotspot: groundHotspotEntry.hotspot }
-                );
-            }
+        // Use the gaze-following hotspot in VR
+        var hotspot = getVRGazeHotspot();
+        if (hotspot && window.triggerGSVTransition) {
+            window.triggerGSVTransition(
+                hotspot.target,
+                bearingForHotspot(hotspot),
+                { hotspot: hotspot }
+            );
         }
     }
 
+    // ==============================================================
+    //  EXPOSE
+    // ==============================================================
     window.initHotspots = initHotspots;
     window.updateHotspots = updateHotspots;
     window.onValidClick = onValidClick;
     window.onDoubleClick = onDoubleClick;
     window.rebuildHotspots = initHotspots;
-    window.getActiveController = getActiveController;
+    window.getActiveController = function () {
+        var controllers = window.tourState.xrControllers;
+        if (!controllers) { return null; }
+        for (var i = 0; i < controllers.length; i++) {
+            if (controllers[i] && controllers[i].matrixWorld) {
+                return controllers[i];
+            }
+        }
+        return controllers.length > 0 ? controllers[0] : null;
+    };
     window.getGroundHotspotMeshes = function () { return allGroundHotspotMeshes; };
     window.handleXRSelect = handleXRSelect;
+    window.moveGroundArrowWithJoystick = moveGroundArrowWithJoystick;
+    window.getVRGazeHotspot = getVRGazeHotspot;
 })();
