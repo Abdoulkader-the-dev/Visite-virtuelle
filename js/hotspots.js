@@ -45,6 +45,10 @@
     var PULSE_CIRCLE_RADIUS = 0.25;
     var pulseCircleTexture = null;
 
+    // [FIX] VR joystick position for the arrow (starts at origin)
+    var vrJoystickPosition = new THREE.Vector3(0, GROUND_Y, 0);
+    var vrJoystickActive = false;
+
     function currentHotspots() {
         return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots;
     }
@@ -126,6 +130,9 @@
         groundHotspotEntry = null;
         allGroundHotspotMeshes = [];
         clearPulseCircles();
+        // Reset VR joystick position
+        vrJoystickPosition.set(0, GROUND_Y, 0);
+        vrJoystickActive = false;
     }
 
     function createPulseCircleTexture() {
@@ -448,43 +455,13 @@
     }
 
     // ==============================================================
-    //  VR: Get headset gaze direction on ground plane
-    // ==============================================================
-    function getVRGazeGroundPosition() {
-        var camera = window.tourState.camera;
-        if (!camera) return null;
-
-        var gazeDir = new THREE.Vector3(0, 0, -1);
-        gazeDir.applyQuaternion(camera.quaternion);
-        gazeDir.y = 0;
-        gazeDir.normalize();
-
-        var groundDistance = 3.5;
-        var pos = new THREE.Vector3(
-            gazeDir.x * groundDistance,
-            GROUND_Y,
-            gazeDir.z * groundDistance
-        );
-
-        var hLen = Math.sqrt(pos.x * pos.x + pos.z * pos.z);
-        if (hLen > MAX_FOLLOW_RADIUS) {
-            var s = MAX_FOLLOW_RADIUS / hLen;
-            pos.x *= s;
-            pos.z *= s;
-        } else if (hLen < MIN_FOLLOW_RADIUS && hLen > 0.01) {
-            var s2 = MIN_FOLLOW_RADIUS / hLen;
-            pos.x *= s2;
-            pos.z *= s2;
-        }
-
-        return pos;
-    }
-
-    // ==============================================================
-    //  VR: Move ground arrow with joystick
+    //  [FIX] VR: Move arrow with joystick ONLY (no head tracking)
     // ==============================================================
     function moveGroundArrowWithJoystick(x, y) {
-        if (!groundHotspotEntry || !window.tourState.isXRActive) return;
+        if (!groundHotspotEntry) return;
+
+        // Only move in VR mode
+        if (!window.tourState.isXRActive) return;
 
         var camera = window.tourState.camera;
         var forward = new THREE.Vector3(0, 0, -1);
@@ -497,37 +474,60 @@
         right.y = 0;
         right.normalize();
 
-        var speed = 0.05;
+        var speed = 0.08;
         var move = new THREE.Vector3()
             .addScaledVector(forward, -y * speed)
             .addScaledVector(right, x * speed);
 
-        var currentPos = groundHotspotEntry.ring.position;
-        var newPos = currentPos.clone().add(move);
+        vrJoystickPosition.add(move);
+        vrJoystickActive = true;
 
-        var hLen = Math.sqrt(newPos.x * newPos.x + newPos.z * newPos.z);
+        // Clamp to follow radius
+        var hLen = Math.sqrt(vrJoystickPosition.x * vrJoystickPosition.x + vrJoystickPosition.z * vrJoystickPosition.z);
         if (hLen > MAX_FOLLOW_RADIUS) {
             var s = MAX_FOLLOW_RADIUS / hLen;
-            newPos.x *= s;
-            newPos.z *= s;
+            vrJoystickPosition.x *= s;
+            vrJoystickPosition.z *= s;
+        } else if (hLen < MIN_FOLLOW_RADIUS && hLen > 0.01) {
+            var s2 = MIN_FOLLOW_RADIUS / hLen;
+            vrJoystickPosition.x *= s2;
+            vrJoystickPosition.z *= s2;
         }
 
-        groundHotspotEntry.ring.position.copy(newPos);
-        groundHotspotEntry.arrow.position.copy(newPos);
+        // Update the arrow position
+        groundHotspotEntry.ring.position.copy(vrJoystickPosition);
+        groundHotspotEntry.arrow.position.copy(vrJoystickPosition);
         groundHotspotEntry.arrow.position.y += 0.01;
 
-        var nearest = nearestTransitionHotspot(new THREE.Vector3(newPos.x, 0, newPos.z));
+        // Find nearest hotspot and point arrow at it
+        var nearest = nearestTransitionHotspot(new THREE.Vector3(vrJoystickPosition.x, 0, vrJoystickPosition.z));
         if (nearest) {
             groundHotspotEntry.hotspot = nearest;
             groundHotspotEntry.ring.userData.hotspot = nearest;
             groundHotspotEntry.arrow.userData.hotspot = nearest;
 
-            var dx = nearest.positionVector.x - newPos.x;
-            var dz = nearest.positionVector.z - newPos.z;
+            var dx = nearest.positionVector.x - vrJoystickPosition.x;
+            var dz = nearest.positionVector.z - vrJoystickPosition.z;
             var angle = Math.atan2(-dx, -dz);
             groundHotspotEntry.ring.rotation.y = angle;
             groundHotspotEntry.arrow.rotation.y = angle;
+            groundHotspotEntry.opacity = 0.85;
+        } else {
+            groundHotspotEntry.hotspot = null;
+            groundHotspotEntry.ring.userData.hotspot = null;
+            groundHotspotEntry.arrow.userData.hotspot = null;
+            groundHotspotEntry.opacity = 0.3;
         }
+    }
+
+    // ==============================================================
+    //  Get the current VR hotspot (for trigger selection)
+    // ==============================================================
+    function getVRHotspot() {
+        if (!groundHotspotEntry || !window.tourState.isXRActive) {
+            return null;
+        }
+        return groundHotspotEntry.hotspot;
     }
 
     function updateHotspots() {
@@ -559,7 +559,7 @@
     }
 
     // ==============================================================
-    //  UPDATE GROUND HOTSPOTS - VR + 2D
+    //  UPDATE GROUND HOTSPOTS - VR uses joystick, 2D uses mouse
     // ==============================================================
     function updateGroundHotspots() {
         var camera = window.tourState.camera;
@@ -571,28 +571,25 @@
         }
 
         // ==============================================================
-        //  VR MODE: Use headset gaze direction
+        //  VR MODE: Arrow follows joystick position (NOT headset!)
         // ==============================================================
         if (window.tourState.isXRActive) {
-            var gazePos = getVRGazeGroundPosition();
-            if (gazePos) {
-                nearest = nearestTransitionHotspot(new THREE.Vector3(gazePos.x, 0, gazePos.z));
-                if (nearest) {
-                    groundHotspotEntry.hotspot = nearest;
-                    groundHotspotEntry.ring.position.copy(gazePos);
-                    groundHotspotEntry.arrow.position.copy(gazePos);
-                    groundHotspotEntry.arrow.position.y += 0.01;
-                    groundHotspotEntry.ring.userData.hotspot = nearest;
-                    groundHotspotEntry.arrow.userData.hotspot = nearest;
-
-                    var dx = nearest.positionVector.x - gazePos.x;
-                    var dz = nearest.positionVector.z - gazePos.z;
-                    var angleToTarget = Math.atan2(-dx, -dz);
-                    groundHotspotEntry.ring.rotation.y = angleToTarget;
-                    groundHotspotEntry.arrow.rotation.y = angleToTarget;
-
-                    targetOpacity = 0.85;
-                }
+            // The arrow position is already updated by moveGroundArrowWithJoystick()
+            // We just need to make sure it's visible
+            if (vrJoystickActive && groundHotspotEntry.hotspot) {
+                targetOpacity = 0.85;
+                // The arrow is already positioned and rotated by moveGroundArrowWithJoystick
+            } else if (vrJoystickActive) {
+                targetOpacity = 0.3;
+            } else {
+                // If joystick hasn't moved yet, show arrow at center with no hotspot
+                groundHotspotEntry.ring.position.copy(vrJoystickPosition);
+                groundHotspotEntry.arrow.position.copy(vrJoystickPosition);
+                groundHotspotEntry.arrow.position.y += 0.01;
+                groundHotspotEntry.hotspot = null;
+                groundHotspotEntry.ring.userData.hotspot = null;
+                groundHotspotEntry.arrow.userData.hotspot = null;
+                targetOpacity = 0.2;
             }
         }
         // ==============================================================
@@ -645,7 +642,8 @@
             }
         }
 
-        if (!nearest) {
+        // Smooth opacity transition
+        if (!nearest && !window.tourState.isXRActive) {
             groundHotspotEntry.hotspot = null;
             groundHotspotEntry.ring.userData.hotspot = null;
             groundHotspotEntry.arrow.userData.hotspot = null;
@@ -722,13 +720,9 @@
         return null;
     }
 
-    function getVRGazeHotspot() {
-        if (!window.tourState.isXRActive || !groundHotspotEntry) {
-            return null;
-        }
-        return groundHotspotEntry.hotspot;
-    }
-
+    // ==============================================================
+    //  [FIX] VR: Handle trigger select - uses joystick position
+    // ==============================================================
     function handleXRSelect(controller) {
         if (!controller) { return; }
 
@@ -738,6 +732,7 @@
         raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
         raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
+        // Check if user clicked the Exit VR button
         if (window.vrExitButton) {
             var exitHits = raycaster.intersectObject(window.vrExitButton);
             if (exitHits.length > 0) {
@@ -748,12 +743,13 @@
             }
         }
 
+        // Check if user clicked the VR info panel close button
         if (window.checkVRInfoPanelClose && window.checkVRInfoPanelClose(raycaster)) {
             return;
         }
 
-        // Use the gaze-following hotspot in VR
-        var hotspot = getVRGazeHotspot();
+        // [FIX] Use the joystick-controlled hotspot
+        var hotspot = getVRHotspot();
         if (hotspot && window.triggerGSVTransition) {
             window.triggerGSVTransition(
                 hotspot.target,
@@ -784,5 +780,5 @@
     window.getGroundHotspotMeshes = function () { return allGroundHotspotMeshes; };
     window.handleXRSelect = handleXRSelect;
     window.moveGroundArrowWithJoystick = moveGroundArrowWithJoystick;
-    window.getVRGazeHotspot = getVRGazeHotspot;
+    window.getVRHotspot = getVRHotspot;
 })();

@@ -4,11 +4,6 @@
     // =========================================================================
     //  VR UI — Strict minimum : HUD avec bouton "Quitter VR" uniquement
     // =========================================================================
-    //  Aucun menu, aucune grille de scènes, aucun panneau flottant.
-    //  La navigation se fait uniquement via la flèche 3D au sol (hotspots.js)
-    //  et le joystick (xr-controls.js). Le "select" (gâchette) est câblé
-    //  depuis main.js → setupXRControllers() vers handleXRSelect (hotspots.js).
-    // =========================================================================
 
     if (!CanvasRenderingContext2D.prototype.roundRect) {
         CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
@@ -144,8 +139,8 @@
     function hideVRUI() {
         if (vrUiGroup) {
             vrUiGroup.visible = false;
-            updateVRButtonState(true);
         }
+        updateVRButtonState(true);
     }
 
     function initVRUI() {
@@ -182,18 +177,15 @@
         if (!renderer) {
             window.tourState.isXRActive = false;
             updateVRButtonState(true);
+            if (window.hideVRUI) window.hideVRUI();
             return;
         }
 
         var session = renderer.xr.getSession();
         if (session) {
             session.end().then(function () {
-                window.tourState.isXRActive = false;
-                isEnteringVR = false;
-                hideVRUI();
-                hideVRInfoPanel();
-                updateVRButtonState(true);
                 console.log('[VR] Session terminée');
+                updateVRButtonState(true);
             }).catch(function (err) {
                 console.error('[VR] Erreur fin de session:', err);
                 window.tourState.isXRActive = false;
@@ -212,7 +204,7 @@
     }
 
     // ==============================================================
-    //  [FIX CRITIQUE] 'local-floor' pour avoir la hauteur des yeux
+    //  [FIX] 'local-floor' for eye height
     // ==============================================================
     function enterVR() {
         if (isEnteringVR) return;
@@ -239,14 +231,16 @@
                 return;
             }
 
-            // [FIX] Utiliser 'local-floor' pour la hauteur des yeux
             renderer.xr.setReferenceSpaceType('local-floor');
 
             navigator.xr.requestSession('immersive-vr', {
                 requiredFeatures: ['local-floor']
             }).then(function (session) {
+                session.addEventListener('end', function () {
+                    console.log('[VR] Session ended via event');
+                });
+
                 renderer.xr.setSession(session).then(function () {
-                    window.tourState.isXRActive = true;
                     isEnteringVR = false;
                     showVRUI();
                     updateVRButtonState(true);
@@ -278,6 +272,7 @@
 
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
+            if (vrUiGroup) vrUiGroup.visible = false;
             return;
         }
 
@@ -542,12 +537,12 @@
     }
 
     // ==============================================================
-    //  Gestion des erreurs de référence space
+    //  Error handling
     // ==============================================================
     window.addEventListener('unhandledrejection', function (event) {
         var reason = event.reason && event.reason.message ? event.reason.message : '';
         if (reason.indexOf('reference space') !== -1 && window.tourState.isXRActive) {
-            console.error('[VR] Reference space non supporté, sortie forcée:', reason);
+            console.error('[VR] Reference space error, exiting VR:', reason);
             doExitVR();
         }
     });

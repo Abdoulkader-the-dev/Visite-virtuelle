@@ -2,13 +2,8 @@
     'use strict';
 
     var textureLoader;
-    // [FIX MAJEUR] L'ancien cache était un objet simple qui ne libérait JAMAIS
-    // aucune texture — 24 panoramas GoPro haute résolution s'accumulaient tous
-    // en VRAM au fil de la navigation. Le cahier des charges impose une LRU
-    // limitée à 5 textures max avec dispose() explicite. C'est la cause
-    // principale du chargement lent / de la lourdeur en VR.
     var MAX_CACHED_TEXTURES = 5;
-    var textureCache = new Map(); // insertion order = ordre d'accès (LRU)
+    var textureCache = new Map();
     var xrBaseReferenceSpace = null;
     var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
 
@@ -52,40 +47,65 @@
         renderer.xr.setReferenceSpace(offsetReferenceSpace);
     }
 
-    // [FIX] Câblage manquant : la gâchette (select) des manettes n'était jamais
-    // reliée à handleXRSelect() de hotspots.js. Le bouton "Quitter VR" en 3D et
-    // le panneau info étaient injoignables en casque. On le fait ici, UNE SEULE
-    // fois par contrôleur, à l'initialisation (pas de risque de double-appel
-    // comme pour le thumbstick puisque ce bloc ne s'exécute qu'une fois).
+    // ==============================================================
+    //  [FIX] Controller setup with ALL events properly bound
+    // ==============================================================
     function setupXRControllers() {
         var renderer = window.tourState.renderer;
         if (!renderer) return;
+
+        // Remove old controllers if they exist
+        if (window.tourState.xrControllers) {
+            window.tourState.xrControllers.forEach(function (ctrl) {
+                if (ctrl && ctrl.parent) {
+                    ctrl.removeFromParent();
+                }
+            });
+        }
 
         var controllers = [];
         for (var i = 0; i < 2; i++) {
             var controller = renderer.xr.getController(i);
             controller.userData = { index: i };
-            controllers.push(controller);
 
             (function (ctrl) {
+                // [FIX] Select (trigger) -> selects hotspot
                 ctrl.addEventListener('selectstart', function () {
                     if (window.handleXRSelect) {
                         window.handleXRSelect(ctrl);
                     }
                 });
+
+                // [FIX] Thumbstick (joystick) -> moves arrow
+                ctrl.addEventListener('thumbstickmoved', function (event) {
+                    if (window.handleXRJoystick) {
+                        window.handleXRJoystick(event, ctrl.userData.index);
+                    }
+                });
+
+                // [FIX] Squeeze (grip) -> back button
+                ctrl.addEventListener('squeezestart', function () {
+                    if (window.goBack) {
+                        window.goBack();
+                    }
+                });
+
+                // [FIX] Button A/X -> toggle menu
+                ctrl.addEventListener('buttondown', function (event) {
+                    if (event.button === 2) {
+                        var menu = document.getElementById('nav-menu');
+                        if (menu) {
+                            menu.classList.toggle('open');
+                        }
+                    }
+                });
             })(controller);
+
+            controllers.push(controller);
         }
+
         window.tourState.xrControllers = controllers;
-
-        renderer.xr.addEventListener('connected', function (event) {
-            console.log('[XR] Controller connected:', event.data);
-        });
-
-        renderer.xr.addEventListener('disconnected', function (event) {
-            console.log('[XR] Controller disconnected:', event.data);
-        });
-
-        console.log('[XR] Controllers initialized');
+        console.log('[XR] Controllers initialized with all events (joystick, trigger, squeeze, buttons)');
     }
 
     function vectorFromConfig(position) {
@@ -108,12 +128,6 @@
         });
     }
 
-    // [OPTIMISATION] .webp testé en premier — bascule automatique et sans
-    // casser l'existant : tant que les .webp n'existent pas encore dans
-    // ./images/, le loader échoue silencieusement (onError) et retombe sur
-    // le .jpg/.JPG actuel. Le jour où tu convertis tes 24 panoramas en WebP
-    // (voir commande de conversion fournie), ils seront servis automatiquement
-    // sans toucher une ligne de config.js.
     function imageCandidates(path) {
         var base = path.replace(/\.(jpg|jpeg|png|webp)$/i, '');
         return [base + '.webp', base + '.jpg', base + '.JPG', base + '.jpeg', base + '.JPEG'];
@@ -267,10 +281,6 @@
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
 
-            // [FIX] config.js définit `defaultBearing`, pas `defaultLon`.
-            // L'ancien code testait `sceneConfig.defaultLon` qui n'existe nulle
-            // part → le bearing par défaut de chaque scène n'était JAMAIS
-            // appliqué au chargement initial (toujours lon=0 sauf ?lon= en URL).
             if (options.isInitialLoad && typeof sceneConfig.defaultBearing === 'number') {
                 window.tourState.lon = ((sceneConfig.defaultBearing % 360) + 360) % 360;
             } else if (typeof options.initialLon === 'number') {
@@ -319,11 +329,6 @@
         });
     }
 
-    // [FIX CONFORT VR] L'auto-rotation après 5s d'inactivité tournait la
-    // sphère MÊME en VR. En casque, une rotation de la scène sans rotation
-    // réelle de la tête est la cause n°1 de mal des transports (voir
-    // recommandations WebXR : mismatch vision/oreille interne). On coupe
-    // totalement l'auto-rotation dès que isXRActive est vrai.
     function updateAutoRotation() {
         if (window.tourState.isXRActive) {
             window.tourState.autoRotating = false;
@@ -341,10 +346,6 @@
         }
     }
 
-    // [FIX PERF/COHÉRENCE VR] En VR, la pose de la caméra (position ET
-    // rotation) est entièrement pilotée par le casque via WebXRManager — tout
-    // camera.lookAt() manuel ici est écrasé au rendu et ne fait que gaspiller
-    // du calcul à 72-90 fps. On le saute proprement en mode XR.
     function updateCameraLookAt() {
         if (window.tourState.isXRActive) {
             return;
@@ -415,6 +416,36 @@
         };
     }
 
+    // ==============================================================
+    //  [FIX] XR Session State Management
+    // ==============================================================
+    function onXRSessionStart() {
+        window.tourState.isXRActive = true;
+        console.log('[XR] Session started - isXRActive = true');
+        if (window.updateVRButtonState) {
+            window.updateVRButtonState(true);
+        }
+        // Setup controllers WITH ALL EVENTS
+        setupXRControllers();
+    }
+
+    function onXRSessionEnd() {
+        window.tourState.isXRActive = false;
+        console.log('[XR] Session ended - isXRActive = false');
+        if (window.updateVRButtonState) {
+            window.updateVRButtonState(true);
+        }
+        if (window.hideVRUI) {
+            window.hideVRUI();
+        }
+        if (window.hideVRInfoPanel) {
+            window.hideVRInfoPanel();
+        }
+        // Reset camera position for 2D mode
+        window.tourState.camera.position.set(0, 0, 0.001);
+        window.tourState.camera.quaternion.identity();
+    }
+
     function init() {
         normalizeConfigPositions();
 
@@ -432,6 +463,10 @@
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
+
+        // [FIX] Listen to XR session events
+        renderer.xr.addEventListener('sessionstart', onXRSessionStart);
+        renderer.xr.addEventListener('sessionend', onXRSessionEnd);
 
         var sphere = createSphere();
         scene.add(sphere);
@@ -465,7 +500,7 @@
         if (window.initXRControls) {
             window.initXRControls();
         }
-        setupXRControllers();
+
         window.addEventListener('resize', onResize);
 
         var startParams = getStartParams();
@@ -484,6 +519,9 @@
     window.preloadAllScenes = preloadAllScenes;
     window.updateCameraLookAt = updateCameraLookAt;
     window.createSphere = createSphere;
+    window.setupXRControllers = setupXRControllers;
+    window.onXRSessionStart = onXRSessionStart;
+    window.onXRSessionEnd = onXRSessionEnd;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
