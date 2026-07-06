@@ -2,7 +2,7 @@
     'use strict';
 
     // =========================================================================
-    //  VR UI — Strict minimum : HUD avec bouton "Quitter VR" uniquement
+    //  VR UI — HUD with "Exit VR" button properly positioned
     // =========================================================================
 
     if (!CanvasRenderingContext2D.prototype.roundRect) {
@@ -25,10 +25,15 @@
     var vrInfoMaterial = null;
     var vrInfoMesh = null;
     var vrInfoVisible = false;
-    var currentHotspot = null;
     var isVRSupported = false;
     var vrButtonElement = null;
     var isEnteringVR = false;
+
+    // ==============================================================
+    //  VR UI Positioning - Fixed!
+    // ==============================================================
+    var UI_DISTANCE = 2.0;      // How far in front of the user
+    var UI_HEIGHT_OFFSET = -0.4; // Slightly below eye level
 
     function checkVRSupport() {
         if (!navigator.xr) {
@@ -79,53 +84,66 @@
         }
     }
 
+    // ==============================================================
+    //  Build VR UI - Exit button properly positioned
+    // ==============================================================
     function buildVRUI() {
         if (vrUiGroup) { return; }
 
         vrUiGroup = new THREE.Group();
         vrUiGroup.name = 'vr-ui-hud';
 
+        // Exit button canvas
         var canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 64;
         var ctx = canvas.getContext('2d');
 
-        ctx.fillStyle = 'rgba(30, 30, 30, 0.75)';
+        // Background with rounded corners
+        ctx.fillStyle = 'rgba(30, 30, 30, 0.8)';
         ctx.beginPath();
         ctx.roundRect(8, 8, 240, 48, 12);
         ctx.fill();
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        // Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(8, 8, 240, 48, 12);
         ctx.stroke();
 
+        // Text
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px system-ui';
+        ctx.font = 'bold 22px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Quitter VR', 128, 32);
+        ctx.fillText('✕ Quitter VR', 128, 32);
 
         var texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+
         var material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
             side: THREE.DoubleSide,
-            depthWrite: false
+            depthWrite: false,
+            opacity: 1
         });
 
-        exitButton = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), material);
-        exitButton.position.set(0, -0.6, -1.5);
+        exitButton = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.12), material);
+        exitButton.position.set(0, -0.5, -1.8); // In front, slightly below center
         exitButton.userData = { action: 'exitVR', isVRButton: true };
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
 
+        // Store reference for hotspot.js
         window.vrExitButton = exitButton;
 
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrUiGroup);
         }
+
+        console.log('[VR] UI built');
     }
 
     function showVRUI() {
@@ -204,7 +222,7 @@
     }
 
     // ==============================================================
-    //  [FIX] 'local-floor' for eye height
+    //  Enter VR - with 'local-floor' for proper height
     // ==============================================================
     function enterVR() {
         if (isEnteringVR) return;
@@ -270,6 +288,9 @@
         });
     }
 
+    // ==============================================================
+    //  Update VR UI - Follows the user's view
+    // ==============================================================
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
             if (vrUiGroup) vrUiGroup.visible = false;
@@ -279,6 +300,7 @@
         var camera = window.tourState.camera;
         if (!camera) return;
 
+        // Get camera position and forward direction
         var position = new THREE.Vector3();
         camera.getWorldPosition(position);
 
@@ -287,19 +309,24 @@
         forward.y = 0;
         forward.normalize();
 
-        var hudPosition = position.clone().add(forward.clone().multiplyScalar(1.5));
-        hudPosition.y -= 0.6;
+        // Position UI in front of the user at a fixed distance
+        var uiPosition = position.clone().add(forward.clone().multiplyScalar(1.8));
+        uiPosition.y -= 0.3; // Slightly below eye level
 
-        vrUiGroup.position.copy(hudPosition);
-        vrUiGroup.lookAt(camera.position);
+        vrUiGroup.position.copy(uiPosition);
+        vrUiGroup.lookAt(position);
         vrUiGroup.rotateY(Math.PI);
         vrUiGroup.visible = true;
 
+        // Update info panel if visible
         if (vrInfoVisible && vrInfoMesh) {
             updateVRInfoPanelPosition();
         }
     }
 
+    // ==============================================================
+    //  VR Info Panel
+    // ==============================================================
     function buildVRInfoPanel() {
         vrInfoCanvas = document.createElement('canvas');
         vrInfoCanvas.width = 768;
@@ -321,13 +348,6 @@
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrInfoMesh);
         }
-
-        vrInfoPanel = {
-            mesh: vrInfoMesh,
-            canvas: vrInfoCanvas,
-            texture: vrInfoTexture,
-            material: vrInfoMaterial
-        };
     }
 
     function showVRInfoPanel(hotspot) {
@@ -335,12 +355,12 @@
             return;
         }
 
-        currentHotspot = hotspot;
         var canvas = vrInfoPanel.canvas;
         var ctx = canvas.getContext('2d');
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Background
         ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
         ctx.beginPath();
         ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
@@ -352,6 +372,7 @@
         ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
         ctx.stroke();
 
+        // Icon circle
         ctx.fillStyle = '#3B82F6';
         ctx.beginPath();
         ctx.arc(72, 72, 36, 0, Math.PI * 2);
@@ -363,11 +384,13 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(hotspot.icon || 'i', 72, 72);
 
+        // Title
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 38px system-ui';
         ctx.fillText(hotspot.title || 'Information', 130, 68);
 
+        // Description with word wrap
         ctx.font = '28px system-ui';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         var words = (hotspot.description || '').split(' ');
@@ -385,6 +408,7 @@
         }
         ctx.fillText(line, 40, y);
 
+        // Close button
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.fillRect(canvas.width - 60, 20, 40, 40);
         ctx.fillStyle = '#ffffff';
@@ -406,7 +430,6 @@
             vrInfoPanel.mesh.visible = false;
         }
         vrInfoVisible = false;
-        currentHotspot = null;
     }
 
     function updateVRInfoPanelPosition() {
@@ -426,27 +449,11 @@
         forward.normalize();
 
         var panelPosition = position.clone().add(forward.clone().multiplyScalar(2.5));
-        panelPosition.y += 0.2;
+        panelPosition.y += 0.1;
 
         vrInfoPanel.mesh.position.copy(panelPosition);
-        vrInfoPanel.mesh.lookAt(camera.position);
+        vrInfoPanel.mesh.lookAt(position);
         vrInfoPanel.mesh.rotateY(Math.PI);
-    }
-
-    function updateVRInfoPanelFrame() {
-        if (vrInfoVisible && vrInfoPanel) {
-            updateVRInfoPanelPosition();
-        }
-    }
-
-    function setupVRButton() {
-        if (!vrButtonElement) {
-            vrButtonElement = document.getElementById('vr-button');
-            if (vrButtonElement) {
-                vrButtonElement.addEventListener('click', toggleVR);
-            }
-        }
-        updateVRButtonState(true);
     }
 
     function checkVRInfoPanelClose(raycaster) {
@@ -464,69 +471,20 @@
             var y = (1 - uv.y) * canvas.height;
             if (x > canvas.width - 60 && x < canvas.width - 20 && y > 20 && y < 60) {
                 hideVRInfoPanel();
+                return true;
             }
         }
         return true;
     }
 
-    function roundedCardCanvas(hotspot) {
-        var canvas = document.createElement('canvas');
-        canvas.width = 768;
-        canvas.height = 384;
-        var ctx = canvas.getContext('2d');
-
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.beginPath();
-        ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
-        ctx.fill();
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
-        ctx.stroke();
-
-        ctx.fillStyle = '#3B82F6';
-        ctx.beginPath();
-        ctx.arc(72, 78, 42, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '48px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(hotspot.icon || 'i', 72, 78);
-
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 42px system-ui';
-        ctx.fillText(hotspot.title || 'Information', 140, 72);
-
-        ctx.font = '28px system-ui';
-        ctx.fillStyle = 'rgba(255,255,255,0.82)';
-        var words = (hotspot.description || '').split(' ');
-        var line = '';
-        var y = 150;
-        for (var i = 0; i < words.length; i += 1) {
-            var test = line + words[i] + ' ';
-            if (ctx.measureText(test).width > 560 && i > 0) {
-                ctx.fillText(line, 58, y);
-                line = words[i] + ' ';
-                y += 40;
-            } else {
-                line = test;
+    function setupVRButton() {
+        if (!vrButtonElement) {
+            vrButtonElement = document.getElementById('vr-button');
+            if (vrButtonElement) {
+                vrButtonElement.addEventListener('click', toggleVR);
             }
         }
-        ctx.fillText(line, 58, y);
-
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(676, 22, 58, 58);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 34px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText('×', 705, 53);
-
-        return canvas;
+        updateVRButtonState(true);
     }
 
     function getVRButton() {
@@ -560,12 +518,18 @@
     window.toggleVR = toggleVR;
     window.showVRInfoPanel = showVRInfoPanel;
     window.hideVRInfoPanel = hideVRInfoPanel;
-    window.updateVRInfoPanelFrame = updateVRInfoPanelFrame;
     window.setupVRButton = setupVRButton;
     window.exitVR = doExitVR;
     window.checkVRInfoPanelClose = checkVRInfoPanelClose;
-    window.roundedCardCanvas = roundedCardCanvas;
     window.getVRButton = getVRButton;
     window.checkVRSupport = checkVRSupport;
     window.updateVRButtonState = updateVRButtonState;
+
+    // Store panel reference for hotspots.js
+    window.vrInfoPanel = {
+        mesh: vrInfoMesh,
+        canvas: vrInfoCanvas,
+        texture: vrInfoTexture,
+        material: vrInfoMaterial
+    };
 })();

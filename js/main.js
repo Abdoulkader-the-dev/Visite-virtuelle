@@ -41,20 +41,19 @@
         if (!viewerPose) return;
 
         var pos = viewerPose.transform.position;
-
         var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
         var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
         renderer.xr.setReferenceSpace(offsetReferenceSpace);
     }
 
     // ==============================================================
-    //  Setup VR controllers with ALL events properly bound
+    //  META QUEST CONTROLLER SETUP
     // ==============================================================
     function setupXRControllers() {
         var renderer = window.tourState.renderer;
         if (!renderer) return;
 
-        // Remove old controllers if they exist
+        // Remove old controllers
         if (window.tourState.xrControllers) {
             window.tourState.xrControllers.forEach(function (ctrl) {
                 if (ctrl && ctrl.parent) {
@@ -68,44 +67,53 @@
             var controller = renderer.xr.getController(i);
             controller.userData = { index: i };
 
-            (function (ctrl) {
-                // Select (trigger) -> selects hotspot
-                ctrl.addEventListener('selectstart', function () {
-                    if (window.handleXRSelect) {
-                        window.handleXRSelect(ctrl);
-                    }
-                });
+            // Add to scene
+            window.tourState.scene.add(controller);
 
-                // Thumbstick (joystick) -> moves arrow
-                ctrl.addEventListener('thumbstickmoved', function (event) {
+            // SELECT (Trigger)
+            controller.addEventListener('selectstart', function (event) {
+                console.log('[XR] Trigger pressed');
+                if (window.handleXRSelect) {
+                    window.handleXRSelect(this);
+                }
+            });
+
+            // SQUEEZE (Grip)
+            controller.addEventListener('squeezestart', function () {
+                console.log('[XR] Grip pressed');
+                if (window.goBack) {
+                    window.goBack();
+                }
+            });
+
+            // THUMBSTICK (Joystick)
+            controller.addEventListener('thumbstickmoved', function (event) {
+                var x = event.data.axes[0] || 0;
+                var y = event.data.axes[1] || 0;
+                var magnitude = Math.sqrt(x * x + y * y);
+                if (magnitude > 0.3) {
                     if (window.handleXRJoystick) {
-                        window.handleXRJoystick(event, ctrl.userData.index);
+                        window.handleXRJoystick(event, this.userData.index);
                     }
-                });
+                }
+            });
 
-                // Squeeze (grip) -> back button
-                ctrl.addEventListener('squeezestart', function () {
-                    if (window.goBack) {
-                        window.goBack();
+            // BUTTON A/X
+            controller.addEventListener('buttondown', function (event) {
+                if (event.button === 2) {
+                    console.log('[XR] Button A/X pressed');
+                    var menu = document.getElementById('nav-menu');
+                    if (menu) {
+                        menu.classList.toggle('open');
                     }
-                });
-
-                // Button A/X -> toggle menu
-                ctrl.addEventListener('buttondown', function (event) {
-                    if (event.button === 2) {
-                        var menu = document.getElementById('nav-menu');
-                        if (menu) {
-                            menu.classList.toggle('open');
-                        }
-                    }
-                });
-            })(controller);
+                }
+            });
 
             controllers.push(controller);
         }
 
         window.tourState.xrControllers = controllers;
-        console.log('[XR] Controllers initialized');
+        console.log('[XR] Meta Quest controllers initialized');
     }
 
     function vectorFromConfig(position) {
@@ -182,9 +190,7 @@
 
     function preloadLinkedScenes(sceneId) {
         var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
-        if (!sceneConfig) {
-            return;
-        }
+        if (!sceneConfig) return;
 
         sceneConfig.hotspots.forEach(function (hotspot) {
             if (hotspot.type === 'transition' && window.TOUR_CONFIG.scenes[hotspot.target]) {
@@ -218,13 +224,9 @@
         }).slice(0, budget);
 
         function loadNext(ids, index) {
-            var idle;
+            if (index >= ids.length) return;
 
-            if (index >= ids.length) {
-                return;
-            }
-
-            idle = function () {
+            var idle = function () {
                 loadTexture(window.TOUR_CONFIG.scenes[ids[index]].image)
                     .catch(function () { })
                     .then(function () {
@@ -417,20 +419,23 @@
     }
 
     // ==============================================================
-    //  XR Session State Management
+    //  XR Session Management
     // ==============================================================
     function onXRSessionStart() {
         window.tourState.isXRActive = true;
-        console.log('[XR] Session started - isXRActive = true');
+        console.log('[XR] Session started');
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
-        setupXRControllers();
+        // Setup controllers after session starts
+        setTimeout(function () {
+            setupXRControllers();
+        }, 100);
     }
 
     function onXRSessionEnd() {
         window.tourState.isXRActive = false;
-        console.log('[XR] Session ended - isXRActive = false');
+        console.log('[XR] Session ended');
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
@@ -440,7 +445,6 @@
         if (window.hideVRInfoPanel) {
             window.hideVRInfoPanel();
         }
-        // Reset camera position for 2D mode
         window.tourState.camera.position.set(0, 0, 0.001);
         window.tourState.camera.quaternion.identity();
     }
@@ -463,7 +467,6 @@
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
 
-        // Listen to XR session events
         renderer.xr.addEventListener('sessionstart', onXRSessionStart);
         renderer.xr.addEventListener('sessionend', onXRSessionEnd);
 
