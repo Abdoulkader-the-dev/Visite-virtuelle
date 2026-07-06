@@ -239,25 +239,34 @@
                 return;
             }
 
-            renderer.xr.setSession(null);
+            // [FIX] Sans cette ligne, WebXRManager demande 'local-floor' par
+            // défaut en interne (référence par défaut de Three.js r128), une
+            // feature jamais négociée dans requestSession() ci-dessous puisqu'on
+            // ne demande que 'local' → requestReferenceSpace('local-floor')
+            // rejette silencieusement → la session meurt aussitôt sur le Quest.
+            renderer.xr.setReferenceSpaceType('local');
 
             navigator.xr.requestSession('immersive-vr', {
                 requiredFeatures: ['local']
             }).then(function (session) {
-                renderer.xr.setSession(session);
-                window.tourState.isXRActive = true;
-                isEnteringVR = false;
-                showVRUI();
-                updateVRButtonState(true);
+                renderer.xr.setSession(session).then(function () {
+                    window.tourState.isXRActive = true;
+                    isEnteringVR = false;
+                    showVRUI();
+                    updateVRButtonState(true);
 
-                // [OPTIMISATION PERF] Foveated rendering — réduit la charge GPU
-                // sur la périphérie des lentilles (voir recommandation Quest).
-                // Guard typeof car pas garanti disponible selon le build r128.
-                if (typeof renderer.xr.setFoveation === 'function') {
-                    renderer.xr.setFoveation(1);
-                }
+                    if (typeof renderer.xr.setFoveation === 'function') {
+                        renderer.xr.setFoveation(1);
+                    }
 
-                console.log('[VR] Session démarrée');
+                    console.log('[VR] Session démarrée');
+                }).catch(function (err) {
+                    console.error('[VR] Erreur setSession (reference space):', err);
+                    isEnteringVR = false;
+                    window.tourState.isXRActive = false;
+                    updateVRButtonState(true);
+                    session.end();
+                });
             }).catch(function (err) {
                 console.error('[VR] Erreur démarrage session:', err);
                 isEnteringVR = false;
