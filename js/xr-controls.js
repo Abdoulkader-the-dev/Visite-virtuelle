@@ -10,19 +10,14 @@
     // ========================================================================
 
     var joystickDeadZone = 0.3;
-    var controllerEventsAttached = false;
 
     function initXRControls() {
-        var renderer = window.tourState.renderer;
-        if (!renderer) return;
-
-        renderer.xr.addEventListener('sessionstart', function () {
-            console.log('[XR] Session started');
-        });
+        // Nothing needed here - events are bound in main.js
+        console.log('[XR] Controls initialized');
     }
 
     // ==============================================================
-    //  [FIX] Handle joystick movement - moves arrow in VR
+    //  Handle joystick movement - moves arrow in VR
     // ==============================================================
     function handleXRJoystick(event, controllerIndex) {
         var x = event.data.axes[0] || 0;
@@ -39,32 +34,6 @@
                 window.moveGroundArrowWithJoystick(x, y);
             }
             window.tourState.lastInteractionTime = Date.now();
-        }
-        // Fallback for 2D mode (for testing without VR)
-        else {
-            if (Math.abs(x) > joystickDeadZone) {
-                window.tourState.lon += x * 0.03 * 3;
-                window.tourState.lastInteractionTime = Date.now();
-            }
-        }
-    }
-
-    // ==============================================================
-    //  SQUEEZE (pression latérale) — Retour arrière
-    // ==============================================================
-    function handleSqueezeStart() {
-        if (window.goBack) {
-            window.goBack();
-        }
-    }
-
-    // ==============================================================
-    //  BOUTON A / X — Ouvrir le menu
-    // ==============================================================
-    function handleButtonA() {
-        var menu = document.getElementById('nav-menu');
-        if (menu) {
-            menu.classList.toggle('open');
         }
     }
 

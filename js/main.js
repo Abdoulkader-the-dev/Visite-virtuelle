@@ -48,7 +48,7 @@
     }
 
     // ==============================================================
-    //  [FIX] Controller setup with ALL events properly bound
+    //  Setup VR controllers with ALL events properly bound
     // ==============================================================
     function setupXRControllers() {
         var renderer = window.tourState.renderer;
@@ -69,28 +69,28 @@
             controller.userData = { index: i };
 
             (function (ctrl) {
-                // [FIX] Select (trigger) -> selects hotspot
+                // Select (trigger) -> selects hotspot
                 ctrl.addEventListener('selectstart', function () {
                     if (window.handleXRSelect) {
                         window.handleXRSelect(ctrl);
                     }
                 });
 
-                // [FIX] Thumbstick (joystick) -> moves arrow
+                // Thumbstick (joystick) -> moves arrow
                 ctrl.addEventListener('thumbstickmoved', function (event) {
                     if (window.handleXRJoystick) {
                         window.handleXRJoystick(event, ctrl.userData.index);
                     }
                 });
 
-                // [FIX] Squeeze (grip) -> back button
+                // Squeeze (grip) -> back button
                 ctrl.addEventListener('squeezestart', function () {
                     if (window.goBack) {
                         window.goBack();
                     }
                 });
 
-                // [FIX] Button A/X -> toggle menu
+                // Button A/X -> toggle menu
                 ctrl.addEventListener('buttondown', function (event) {
                     if (event.button === 2) {
                         var menu = document.getElementById('nav-menu');
@@ -105,7 +105,7 @@
         }
 
         window.tourState.xrControllers = controllers;
-        console.log('[XR] Controllers initialized with all events (joystick, trigger, squeeze, buttons)');
+        console.log('[XR] Controllers initialized');
     }
 
     function vectorFromConfig(position) {
@@ -417,7 +417,7 @@
     }
 
     // ==============================================================
-    //  [FIX] XR Session State Management
+    //  XR Session State Management
     // ==============================================================
     function onXRSessionStart() {
         window.tourState.isXRActive = true;
@@ -425,7 +425,6 @@
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
-        // Setup controllers WITH ALL EVENTS
         setupXRControllers();
     }
 
@@ -464,7 +463,7 @@
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
 
-        // [FIX] Listen to XR session events
+        // Listen to XR session events
         renderer.xr.addEventListener('sessionstart', onXRSessionStart);
         renderer.xr.addEventListener('sessionend', onXRSessionEnd);
 
