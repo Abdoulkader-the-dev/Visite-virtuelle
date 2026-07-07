@@ -30,9 +30,6 @@
         }
     }
 
-    // ==============================================================
-    //  META QUEST CONTROLLER SETUP
-    // ==============================================================
     function setupXRControllers() {
         var renderer = window.tourState.renderer;
         if (!renderer) return;
@@ -160,7 +157,6 @@
             }
             window.tourState.lat = loadOptions.initialLat || 0;
 
-            if (window.initHotspots) window.initHotspots();
             if (window.updateNavMenu) window.updateNavMenu();
             if (window.updateMinimap) window.updateMinimap();
             if (window.updateBackButton) window.updateBackButton();
@@ -168,7 +164,6 @@
             var announcer = document.getElementById('scene-announcer');
             if (announcer) announcer.textContent = 'Vue : ' + sceneConfig.name;
 
-            preloadLinkedScenes(sceneId);
             setTimeout(hideLoading, 120);
             if (!loadOptions.keepTransitionActive) window.tourState.isTransitioning = false;
             window.tourState.lastInteractionTime = Date.now();
@@ -176,7 +171,7 @@
         }).catch(function (error) {
             document.getElementById('loading-text').textContent = error.message;
             console.error(error);
-            throw error;
+            return false;
         });
     }
 
@@ -313,8 +308,14 @@
 
         window.addEventListener('resize', onResize);
         var startParams = getStartParams();
+
         loadScene(startParams.scene, { isInitialLoad: true, initialLon: startParams.lon, initialLat: startParams.lat })
-            .then(() => preloadLinkedScenes(startParams.scene));
+            .then((sceneLoaded) => {
+                if (sceneLoaded) {
+                    if (window.initHotspots) window.initHotspots();
+                    preloadLinkedScenes(startParams.scene);
+                }
+            });
 
         renderer.setAnimationLoop(renderFrame);
     }

@@ -4,14 +4,17 @@
     var infoElements = [];
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
-    var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), window.VR_EYE_HEIGHT);
+    var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), window.VR_EYE_HEIGHT || 1.6);
     var groundPoint = new THREE.Vector3();
 
     var groundHotspotEntry = null;
     var activeHotspot = null;
 
     function currentHotspots() {
-        return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots;
+        if (!window.tourState || !window.tourState.currentScene || !window.TOUR_CONFIG.scenes[window.tourState.currentScene]) {
+            return [];
+        }
+        return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots || [];
     }
 
     function transitionHotspots() {
@@ -20,8 +23,10 @@
 
     function projectToGround(position) {
         var p = position.clone().normalize();
-        var t = -window.VR_EYE_HEIGHT / p.y;
-        return new THREE.Vector3(p.x * t, -window.VR_EYE_HEIGHT, p.z * t);
+        var eyeHeight = window.VR_EYE_HEIGHT || 1.6;
+        if (p.y >= 0) return new THREE.Vector3(p.x, -eyeHeight, p.z); // Evite division par zero
+        var t = -eyeHeight / p.y;
+        return new THREE.Vector3(p.x * t, -eyeHeight, p.z * t);
     }
 
     function nearestTransitionHotspot(point) {
@@ -43,16 +48,21 @@
 
         var group = new THREE.Group();
         group.name = "GroundHotspot";
+
         var ringGeo = new THREE.RingGeometry(0.25, 0.4, 64);
         ringGeo.rotateX(-Math.PI / 2);
         var ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
         var ring = new THREE.Mesh(ringGeo, ringMat);
         group.add(ring);
 
-        var arrowShape = new THREE.Shape([
-            new THREE.Vector2(0, 0.3), new THREE.Vector2(0.2, 0),
-            new THREE.Vector2(0, 0.1), new THREE.Vector2(-0.2, 0)
-        ]);
+        // Correction Définitive pour la création de la flèche
+        var arrowShape = new THREE.Shape();
+        arrowShape.moveTo(0, 0.3);
+        arrowShape.lineTo(0.2, 0);
+        arrowShape.lineTo(0, 0.1);
+        arrowShape.lineTo(-0.2, 0);
+        arrowShape.closePath();
+
         var arrowGeo = new THREE.ShapeGeometry(arrowShape);
         arrowGeo.rotateX(-Math.PI / 2);
         var arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
@@ -65,8 +75,11 @@
     }
 
     function initHotspots() {
+        if (!window.tourState.scene) return;
+
         if (window.tourState.hotspotGroup) window.tourState.scene.remove(window.tourState.hotspotGroup);
         if (window.tourState.groundHotspotGroup) window.tourState.scene.remove(window.tourState.groundHotspotGroup);
+
         infoElements.forEach(el => el.element.remove());
         infoElements = [];
         groundHotspotEntry = null;
@@ -83,8 +96,7 @@
                 el.addEventListener('click', e => window.showInfoCard(hotspot, e.clientX, e.clientY));
                 infoElements.push({ hotspot: hotspot, element: el });
 
-                // Ajout d'un sprite cliquable en VR
-                var spriteMat = new THREE.SpriteMaterial({ color: 0x3B82F6, transparent: true, opacity: 0.5 });
+                var spriteMat = new THREE.SpriteMaterial({ color: 0x3B82F6, transparent: true, opacity: 0.5, depthWrite: false });
                 var sprite = new THREE.Sprite(spriteMat);
                 sprite.position.copy(hotspot.positionVector);
                 sprite.scale.set(20, 20, 1);
@@ -93,7 +105,9 @@
             }
         });
 
-        if (transitionHotspots().length > 0) createGroundHotspot();
+        if (transitionHotspots().length > 0) {
+            createGroundHotspot();
+        }
         window.tourState.scene.add(window.tourState.hotspotGroup);
     }
 
@@ -108,19 +122,18 @@
         groundHotspotEntry.group.position.addScaledVector(forward, -y * 0.05);
         groundHotspotEntry.group.position.addScaledVector(right, x * 0.05);
 
-        // Contrainte au sol
-        groundHotspotEntry.group.position.y = -window.VR_EYE_HEIGHT;
+        groundHotspotEntry.group.position.y = -(window.VR_EYE_HEIGHT || 1.6);
     }
 
     function updateHotspots() {
         var camera = window.tourState.camera;
-        if (!camera) return;
+        if (!camera || !groundHotspotEntry && infoElements.length === 0) return; // Correction de la race condition
 
         var targetOpacity = 0;
         var newActiveHotspot = null;
 
-        if (window.tourState.isXRActive) {
-            if (groundHotspotEntry) {
+        if (groundHotspotEntry) { // S'assurer que l'objet existe
+            if (window.tourState.isXRActive) {
                 newActiveHotspot = nearestTransitionHotspot(groundHotspotEntry.group.position);
                 if (newActiveHotspot) {
                     var targetPos = projectToGround(newActiveHotspot.positionVector);
@@ -128,9 +141,7 @@
                     groundHotspotEntry.arrow.rotation.y = angle;
                     targetOpacity = 0.85;
                 }
-            }
-        } else { // Mode 2D
-            if (groundHotspotEntry) {
+            } else { // Mode 2D
                 mouseNDC.set((window.tourState.lastMouseX / window.innerWidth) * 2 - 1, -(window.tourState.lastMouseY / window.innerHeight) * 2 + 1);
                 groundRaycaster.setFromCamera(mouseNDC, camera);
                 if (window.tourState.mouseSphereLat < -10 && groundRaycaster.ray.intersectPlane(groundPlane, groundPoint)) {
@@ -144,16 +155,12 @@
                     }
                 }
             }
-        }
-
-        activeHotspot = newActiveHotspot;
-        if (groundHotspotEntry) {
-            groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, targetOpacity, 0.1);
+            activeHotspot = newActiveHotspot;
+            groundHotspotEntry.opacity = THREE.MathUtils.lerp(groundHotspotEntry.opacity, targetOpacity, 0.12);
             groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
             groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
         }
 
-        // MàJ des hotspots d'info (pour la 2D)
         infoElements.forEach(function (entry) {
             var vec = entry.hotspot.positionVector.clone().project(camera);
             var isVisible = vec.z < 1;
