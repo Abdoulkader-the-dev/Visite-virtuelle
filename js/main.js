@@ -4,53 +4,31 @@
     var textureLoader;
     var MAX_CACHED_TEXTURES = 5;
     var textureCache = new Map();
-    var xrBaseReferenceSpace = null;
-    var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
 
     // Hauteur des yeux en VR (mètres)
     var VR_EYE_HEIGHT = 1.6;
+    window.VR_EYE_HEIGHT = VR_EYE_HEIGHT; // Exposer pour les autres fichiers
 
     function isTextureInUse(texture) {
         var ts = window.tourState;
         if (!ts) return false;
-        if (texture === ts.currentTexture) return true;
-        if (ts.sphere && ts.sphere.material && ts.sphere.material.map === texture) return true;
-        if (ts.sphere2 && ts.sphere2.material && ts.sphere2.material.map === texture) return true;
-        return false;
+        return texture === ts.currentTexture ||
+            (ts.sphere && ts.sphere.material.map === texture) ||
+            (ts.sphere2 && ts.sphere2.material.map === texture);
     }
 
     function evictLRUIfNeeded() {
-        if (textureCache.size <= MAX_CACHED_TEXTURES) {
-            return;
-        }
-        var it = textureCache.keys();
-        var toCheck = Array.from(it);
-        for (var i = 0; i < toCheck.length && textureCache.size > MAX_CACHED_TEXTURES; i += 1) {
-            var key = toCheck[i];
+        if (textureCache.size <= MAX_CACHED_TEXTURES) return;
+        var keys = Array.from(textureCache.keys());
+        for (var i = 0; i < keys.length && textureCache.size > MAX_CACHED_TEXTURES; i++) {
+            var key = keys[i];
             var texture = textureCache.get(key);
-            if (!texture || isTextureInUse(texture)) {
-                continue;
+            if (texture && !isTextureInUse(texture)) {
+                texture.dispose();
+                textureCache.delete(key);
             }
-            texture.dispose();
-            textureCache.delete(key);
         }
     }
-
-    // Cette fonction n'est plus nécessaire avec la gestion de hauteur manuelle
-    /*
-    function applyXRPositionalOffset(frame) {
-        var renderer = window.tourState.renderer;
-        if (!xrBaseReferenceSpace) return;
-
-        var viewerPose = frame.getViewerPose(xrBaseReferenceSpace);
-        if (!viewerPose) return;
-
-        var pos = viewerPose.transform.position;
-        var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
-        var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
-        renderer.xr.setReferenceSpace(offsetReferenceSpace);
-    }
-    */
 
     // ==============================================================
     //  META QUEST CONTROLLER SETUP
@@ -59,67 +37,36 @@
         var renderer = window.tourState.renderer;
         if (!renderer) return;
 
-        // Remove old controllers
         if (window.tourState.xrControllers) {
-            window.tourState.xrControllers.forEach(function (ctrl) {
-                if (ctrl && ctrl.parent) {
-                    ctrl.parent.remove(ctrl);
-                }
-            });
+            window.tourState.xrControllers.forEach(c => c.parent && c.parent.remove(c));
         }
 
         var controllers = [];
         for (var i = 0; i < 2; i++) {
             var controller = renderer.xr.getController(i);
-            controller.userData = { index: i };
+            controller.userData = { index: i, isSelecting: false };
 
-            // Ajout du modèle de laser
-            var geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
-            var material = new THREE.LineBasicMaterial({
-                color: 0xffffff,
-                linewidth: 2,
-                transparent: true,
-                opacity: 0.5
-            });
-            var line = new THREE.Line(geometry, material);
+            var lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -5)]);
+            var lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2, transparent: true, opacity: 0.5 });
+            var line = new THREE.Line(lineGeo, lineMat);
             line.name = 'line';
-            line.scale.z = 5;
             controller.add(line);
 
-            // Ajout du réticule de visée
-            var reticleGeo = new THREE.RingGeometry(0.02, 0.03, 32);
-            var reticleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
-            var reticle = new THREE.Mesh(reticleGeo, reticleMat);
-            reticle.position.z = -1;
-            controller.add(reticle);
-
-            // Add to scene
             window.tourState.scene.add(controller);
 
-            // SELECT (Trigger)
-            controller.addEventListener('selectstart', function (event) {
-                console.log('[XR] Trigger pressed');
-                if (window.handleXRSelect) {
-                    window.handleXRSelect(this);
-                }
+            controller.addEventListener('selectstart', function () {
+                this.userData.isSelecting = true;
+                if (window.handleXRSelect) window.handleXRSelect(this);
             });
-
-            controller.addEventListener('selectend', function (event) {
-                console.log('[XR] Trigger released');
-                // Vous pouvez ajouter une logique ici si nécessaire
+            controller.addEventListener('selectend', function () {
+                this.userData.isSelecting = false;
             });
-
-            // SQUEEZE (Grip)
             controller.addEventListener('squeezestart', function () {
-                console.log('[XR] Grip pressed');
-                if (window.goBack) {
-                    window.goBack();
-                }
+                if (window.goBack) window.goBack();
             });
 
             controllers.push(controller);
         }
-
         window.tourState.xrControllers = controllers;
         console.log('[XR] Meta Quest controllers initialized');
     }
@@ -129,24 +76,16 @@
     }
 
     function normalizeConfigPositions() {
-        Object.keys(window.TOUR_CONFIG.scenes).forEach(function (sceneId) {
-            window.TOUR_CONFIG.scenes[sceneId].hotspots.forEach(function (hotspot) {
+        Object.values(window.TOUR_CONFIG.scenes).forEach(function (scene) {
+            (scene.hotspots || []).forEach(function (hotspot) {
                 if (!hotspot.positionVector) {
                     hotspot.positionVector = vectorFromConfig(hotspot.position);
                 }
                 if (hotspot.type === 'transition' && typeof hotspot.bearing !== 'number') {
-                    hotspot.bearing = Math.atan2(hotspot.position.x, -hotspot.position.z) * 180 / Math.PI;
-                    if (hotspot.bearing < 0) {
-                        hotspot.bearing += 360;
-                    }
+                    hotspot.bearing = (Math.atan2(hotspot.position.x, -hotspot.position.z) * 180 / Math.PI + 360) % 360;
                 }
             });
         });
-    }
-
-    function imageCandidates(path) {
-        var base = path.replace(/\.(jpg|jpeg|png|webp)$/i, '');
-        return [base + '.webp', base + '.jpg', base + '.JPG', base + '.jpeg', base + '.JPEG'];
     }
 
     function loadTexture(path) {
@@ -157,105 +96,36 @@
             return Promise.resolve(cached);
         }
 
-        var candidates = imageCandidates(path);
-        var index = 0;
-
         return new Promise(function (resolve, reject) {
-            function tryNext() {
-                if (index >= candidates.length) {
-                    reject(new Error('Image introuvable: ' + path));
-                    return;
-                }
-
-                var candidate = candidates[index];
-                index += 1;
-
-                textureLoader.load(
-                    candidate,
-                    function (texture) {
-                        texture.minFilter = THREE.LinearFilter;
-                        texture.magFilter = THREE.LinearFilter;
-                        texture.generateMipmaps = false;
-                        texture.encoding = THREE.sRGBEncoding;
-                        texture.needsUpdate = true;
-                        textureCache.set(path, texture);
-                        if (candidate !== path) {
-                            textureCache.set(candidate, texture);
-                        }
-                        evictLRUIfNeeded();
-                        resolve(texture);
-                    },
-                    undefined,
-                    tryNext
-                );
-            }
-
-            tryNext();
+            textureLoader.load(path,
+                function (texture) {
+                    texture.minFilter = THREE.LinearFilter;
+                    texture.encoding = THREE.sRGBEncoding;
+                    textureCache.set(path, texture);
+                    evictLRUIfNeeded();
+                    resolve(texture);
+                },
+                undefined,
+                () => reject(new Error('Image not found: ' + path))
+            );
         });
     }
-
     window.loadTourTexture = loadTexture;
 
     function preloadLinkedScenes(sceneId) {
         var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
         if (!sceneConfig) return;
-
         sceneConfig.hotspots.forEach(function (hotspot) {
             if (hotspot.type === 'transition' && window.TOUR_CONFIG.scenes[hotspot.target]) {
-                loadTexture(window.TOUR_CONFIG.scenes[hotspot.target].image).catch(function () { });
+                loadTexture(window.TOUR_CONFIG.scenes[hotspot.target].image).catch(() => { });
             }
         });
-    }
-
-    function preloadAllScenes() {
-        var allIds = Object.keys(window.TOUR_CONFIG.scenes);
-        var currentId = window.tourState.currentScene;
-        var currentConfig = window.TOUR_CONFIG.scenes[currentId];
-        var linkedIds = [];
-        var remainingIds;
-        var budget;
-
-        if (currentConfig) {
-            linkedIds = (currentConfig.hotspots || [])
-                .filter(function (hotspot) {
-                    return hotspot.type === 'transition';
-                })
-                .map(function (hotspot) {
-                    return hotspot.target;
-                });
-        }
-
-        budget = Math.max(0, MAX_CACHED_TEXTURES - 1 - linkedIds.length);
-
-        remainingIds = allIds.filter(function (id) {
-            return id !== currentId && linkedIds.indexOf(id) === -1;
-        }).slice(0, budget);
-
-        function loadNext(ids, index) {
-            if (index >= ids.length) return;
-
-            var idle = function () {
-                loadTexture(window.TOUR_CONFIG.scenes[ids[index]].image)
-                    .catch(function () { })
-                    .then(function () {
-                        loadNext(ids, index + 1);
-                    });
-            };
-
-            if (window.requestIdleCallback) {
-                window.requestIdleCallback(idle, { timeout: 3000 });
-            } else {
-                setTimeout(idle, 200 * index);
-            }
-        }
-
-        loadNext(remainingIds, 0);
     }
 
     function createSphere() {
         var geo = new THREE.SphereGeometry(500, 60, 40);
         geo.scale(-1, 1, 1);
-        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1, depthWrite: true });
+        var mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         return new THREE.Mesh(geo, mat);
     }
 
@@ -270,20 +140,12 @@
         document.getElementById('loading-overlay').classList.remove('visible');
     }
 
-    function loadScene(sceneId, loadOptions) {
+    function loadScene(sceneId, loadOptions = {}) {
         var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
-        var options = typeof loadOptions === 'object' ? loadOptions : {
-            keepTransitionActive: !!loadOptions
-        };
-
-        if (!sceneConfig) {
-            return Promise.reject(new Error('Scène inconnue: ' + sceneId));
-        }
+        if (!sceneConfig) return Promise.reject(new Error('Scene unknown: ' + sceneId));
 
         window.tourState.isTransitioning = true;
-        if (!options.skipLoadingScreen) {
-            showLoading(sceneConfig.name);
-        }
+        if (!loadOptions.skipLoadingScreen) showLoading(sceneConfig.name);
 
         return loadTexture(sceneConfig.image).then(function (texture) {
             window.tourState.sphere.material.map = texture;
@@ -291,45 +153,24 @@
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
 
-            if (options.isInitialLoad && typeof sceneConfig.defaultBearing === 'number') {
-                window.tourState.lon = ((sceneConfig.defaultBearing % 360) + 360) % 360;
-            } else if (typeof options.initialLon === 'number') {
-                window.tourState.lon = options.initialLon;
+            if (loadOptions.isInitialLoad && typeof sceneConfig.defaultBearing === 'number') {
+                window.tourState.lon = sceneConfig.defaultBearing;
+            } else if (typeof loadOptions.initialLon === 'number') {
+                window.tourState.lon = loadOptions.initialLon;
             }
+            window.tourState.lat = loadOptions.initialLat || 0;
 
-            window.tourState.lat = typeof options.initialLat === 'number' ? options.initialLat : 0;
-            window.tourState.fov = typeof options.initialFov === 'number' ? options.initialFov : 75;
-            window.tourState.camera.fov = window.tourState.fov;
-            window.tourState.camera.updateProjectionMatrix();
-            window.tourState.activeFloorHotspot = null;
-            window.tourState.mouseSphereLat = null;
-            window.tourState.mouseSpherePoint = null;
-
-            if (window.initHotspots) {
-                window.initHotspots();
-            }
-            if (window.updateNavMenu) {
-                window.updateNavMenu();
-            }
-            if (window.updateMinimap) {
-                window.updateMinimap();
-            }
-            if (window.updateBackButton) {
-                window.updateBackButton();
-            }
+            if (window.initHotspots) window.initHotspots();
+            if (window.updateNavMenu) window.updateNavMenu();
+            if (window.updateMinimap) window.updateMinimap();
+            if (window.updateBackButton) window.updateBackButton();
 
             var announcer = document.getElementById('scene-announcer');
-            if (announcer) {
-                announcer.textContent = 'Vue : ' + sceneConfig.name;
-            }
+            if (announcer) announcer.textContent = 'Vue : ' + sceneConfig.name;
 
             preloadLinkedScenes(sceneId);
-            if (!options.skipLoadingScreen) {
-                setTimeout(hideLoading, 120);
-            }
-            if (!options.keepTransitionActive) {
-                window.tourState.isTransitioning = false;
-            }
+            setTimeout(hideLoading, 120);
+            if (!loadOptions.keepTransitionActive) window.tourState.isTransitioning = false;
             window.tourState.lastInteractionTime = Date.now();
             return true;
         }).catch(function (error) {
@@ -340,71 +181,40 @@
     }
 
     function updateAutoRotation() {
-        if (window.tourState.isXRActive) {
+        if (window.tourState.isXRActive || window.tourState.isDragging || window.tourState.isTransitioning) {
             window.tourState.autoRotating = false;
             return;
         }
-        if (
-            Date.now() - window.tourState.lastInteractionTime > 5000 &&
-            !window.tourState.isTransitioning &&
-            !window.tourState.isDragging
-        ) {
+        if (Date.now() - window.tourState.lastInteractionTime > 5000) {
             window.tourState.lon += 0.03;
             window.tourState.autoRotating = true;
-        } else {
-            window.tourState.autoRotating = false;
         }
     }
 
     function updateCameraLookAt() {
-        if (window.tourState.isXRActive) {
-            return;
-        }
-
-        var phi = (90 - window.tourState.lat) * Math.PI / 180;
-        var theta = window.tourState.lon * Math.PI / 180;
-
-        window.tourState.camera.lookAt(
+        if (window.tourState.isXRActive) return;
+        var phi = THREE.MathUtils.degToRad(90 - window.tourState.lat);
+        var theta = THREE.MathUtils.degToRad(window.tourState.lon);
+        var target = new THREE.Vector3(
             500 * Math.sin(phi) * Math.cos(theta),
             500 * Math.cos(phi),
             500 * Math.sin(phi) * Math.sin(theta)
         );
-
-        if (window.tourState.camera.fov !== window.tourState.fov) {
-            window.tourState.camera.fov = window.tourState.fov;
-            window.tourState.camera.updateProjectionMatrix();
-        }
+        window.tourState.camera.lookAt(target);
     }
 
     function renderFrame(timestamp, frame) {
-        // La boucle de rendu principale
-        var isXR = window.tourState.isXRActive;
+        updateAutoRotation();
+        updateCameraLookAt();
 
-        if (!isXR) {
-            updateAutoRotation();
-            updateCameraLookAt();
-        }
+        if (window.updateHotspots) window.updateHotspots();
+        if (window.updateMinimapArrow) window.updateMinimapArrow();
+        if (window.updateCompass) window.updateCompass();
+        if (window.updateVRUI) window.updateVRUI();
 
-        if (window.updateHotspots) {
-            window.updateHotspots();
+        if (frame && window.tourState.isXRActive && window.pollXRGamepads) {
+            window.pollXRGamepads();
         }
-        if (window.updateMinimapArrow) {
-            window.updateMinimapArrow();
-        }
-        if (window.updateCompass) {
-            window.updateCompass();
-        }
-        if (window.updateVRUI) {
-            window.updateVRUI();
-        }
-
-        if (frame && isXR) {
-            // Polling des joysticks à chaque frame en mode VR
-            if (window.pollXRGamepads) {
-                window.pollXRGamepads();
-            }
-        }
-
         window.tourState.renderer.render(window.tourState.scene, window.tourState.camera);
     }
 
@@ -414,61 +224,32 @@
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
     }
 
     function getStartParams() {
         var params = new URLSearchParams(window.location.search);
         var sceneId = params.get('scene') || '12';
-        var lon = parseFloat(params.get('lon'));
-        var lat = parseFloat(params.get('lat'));
-
-        if (!window.TOUR_CONFIG.scenes[sceneId]) {
-            sceneId = '12';
-        }
-
         return {
-            scene: sceneId,
-            lon: isNaN(lon) ? 0 : lon,
-            lat: isNaN(lat) ? 0 : Math.max(-85, Math.min(85, lat))
+            scene: window.TOUR_CONFIG.scenes[sceneId] ? sceneId : '12',
+            lon: parseFloat(params.get('lon')) || 0,
+            lat: parseFloat(params.get('lat')) || 0
         };
     }
 
-    // ==============================================================
-    //  XR Session Management
-    // ==============================================================
     function onXRSessionStart() {
         window.tourState.isXRActive = true;
         document.body.classList.add('xr-active');
         console.log('[XR] Session started');
 
-        // Décalage vertical de la sphère et des hotspots pour aligner le sol virtuel
-        // avec le sol physique (hauteur des yeux ~1.6m)
         var offset = VR_EYE_HEIGHT;
-        var sphere = window.tourState.sphere;
-        var sphere2 = window.tourState.sphere2;
-        if (sphere) sphere.position.y = offset;
-        if (sphere2) sphere2.position.y = offset;
+        if (window.tourState.sphere) window.tourState.sphere.position.y = offset;
+        if (window.tourState.sphere2) window.tourState.sphere2.position.y = offset;
+        if (window.tourState.hotspotGroup) window.tourState.hotspotGroup.position.y = offset;
+        if (window.tourState.groundHotspotGroup) window.tourState.groundHotspotGroup.position.y = offset;
 
-        // Décaler les groupes de hotspots s'ils existent
-        if (window.tourState.hotspotGroup) {
-            window.tourState.hotspotGroup.position.y = offset;
-        }
-        if (window.tourState.groundHotspotGroup) {
-            window.tourState.groundHotspotGroup.position.y = offset;
-        }
-
-        if (window.updateVRButtonState) {
-            window.updateVRButtonState(true);
-        }
-        if (window.showVRUI) {
-            window.showVRUI();
-        }
-
-        // Setup controllers after session starts
-        setTimeout(function () {
-            setupXRControllers();
-        }, 500); // Léger délai pour s'assurer que tout est prêt
+        if (window.updateVRButtonState) window.updateVRButtonState(true);
+        if (window.showVRUI) window.showVRUI();
+        setTimeout(setupXRControllers, 500);
     }
 
     function onXRSessionEnd() {
@@ -476,58 +257,34 @@
         document.body.classList.remove('xr-active');
         console.log('[XR] Session ended');
 
-        // Restaurer la position verticale de la sphère et des hotspots
-        var offset = 0;
-        var sphere = window.tourState.sphere;
-        var sphere2 = window.tourState.sphere2;
-        if (sphere) sphere.position.y = offset;
-        if (sphere2) sphere2.position.y = offset;
-        if (window.tourState.hotspotGroup) {
-            window.tourState.hotspotGroup.position.y = offset;
-        }
-        if (window.tourState.groundHotspotGroup) {
-            window.tourState.groundHotspotGroup.position.y = offset;
-        }
+        if (window.tourState.sphere) window.tourState.sphere.position.y = 0;
+        if (window.tourState.sphere2) window.tourState.sphere2.position.y = 0;
+        if (window.tourState.hotspotGroup) window.tourState.hotspotGroup.position.y = 0;
+        if (window.tourState.groundHotspotGroup) window.tourState.groundHotspotGroup.position.y = 0;
 
-        // Nettoyer les contrôleurs
         if (window.tourState.xrControllers) {
-            window.tourState.xrControllers.forEach(function (ctrl) {
-                if (ctrl && ctrl.parent) {
-                    ctrl.parent.remove(ctrl);
-                }
-            });
+            window.tourState.xrControllers.forEach(c => c.parent && c.parent.remove(c));
             window.tourState.xrControllers = [];
         }
 
-        if (window.updateVRButtonState) {
-            window.updateVRButtonState(true);
-        }
-        if (window.hideVRUI) {
-            window.hideVRUI();
-        }
-        if (window.hideVRInfoPanel) {
-            window.hideVRInfoPanel();
-        }
+        if (window.updateVRButtonState) window.updateVRButtonState(true);
+        if (window.hideVRUI) window.hideVRUI();
+        if (window.hideVRInfoPanel) window.hideVRInfoPanel();
 
-        // Réinitialiser la caméra 2D
         window.tourState.camera.position.set(0, 0, 0.001);
         window.tourState.camera.quaternion.identity();
-        updateCameraLookAt(); // S'assurer que la caméra 2D regarde dans la bonne direction
+        updateCameraLookAt();
     }
 
     function init() {
         normalizeConfigPositions();
-
         var canvas = document.getElementById('tour-canvas');
         var scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000);
-
         var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 0.001);
+        var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 
-        var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
         renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -536,55 +293,33 @@
 
         var sphere = createSphere();
         scene.add(sphere);
-
         var sphere2 = createSphere();
         sphere2.material.opacity = 0;
-        sphere2.material.depthWrite = false;
-        sphere2.scale.set(0.99, 0.99, 0.99);
         sphere2.visible = false;
         scene.add(sphere2);
 
         textureLoader = new THREE.TextureLoader();
-        textureLoader.setCrossOrigin('anonymous');
 
         window.tourState.camera = camera;
         window.tourState.renderer = renderer;
         window.tourState.scene = scene;
         window.tourState.sphere = sphere;
         window.tourState.sphere2 = sphere2;
-        window.tourState.isXRActive = false;
 
-        // Initialisation des différents modules
         if (window.initControls) window.initControls();
         if (window.initUI) window.initUI();
         if (window.initVRUI) window.initVRUI();
         if (window.initXRControls) window.initXRControls();
 
         window.addEventListener('resize', onResize);
-
         var startParams = getStartParams();
+        loadScene(startParams.scene, { isInitialLoad: true, initialLon: startParams.lon, initialLat: startParams.lat })
+            .then(() => preloadLinkedScenes(startParams.scene));
 
-        loadScene(startParams.scene, { isInitialLoad: true }).then(function () {
-            if (startParams.lon !== 0) {
-                window.tourState.lon = startParams.lon;
-            }
-            window.tourState.lat = startParams.lat;
-            preloadAllScenes();
-        });
-
-        // Démarrage de la boucle de rendu
         renderer.setAnimationLoop(renderFrame);
     }
 
     window.loadScene = loadScene;
-    window.preloadAllScenes = preloadAllScenes;
-    window.updateCameraLookAt = updateCameraLookAt;
-    window.createSphere = createSphere;
-    window.setupXRControllers = setupXRControllers;
-    window.onXRSessionStart = onXRSessionStart;
-    window.onXRSessionEnd = onXRSessionEnd;
-    window.VR_EYE_HEIGHT = VR_EYE_HEIGHT;
-
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
