@@ -378,6 +378,10 @@
             }
         }
 
+        // Exposer les groupes pour le décalage vertical en VR
+        window.tourState.hotspotGroup = hotspotGroup;
+        window.tourState.groundHotspotGroup = groundHotspotGroup;
+
         createPulseCircles();
 
         var fwdBtn = document.getElementById('dir-arrow-fwd');

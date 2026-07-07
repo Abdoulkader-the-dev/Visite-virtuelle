@@ -7,6 +7,9 @@
     var xrBaseReferenceSpace = null;
     var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
 
+    // Hauteur des yeux en VR (mètres)
+    var VR_EYE_HEIGHT = 1.6;
+
     function isTextureInUse(texture) {
         var ts = window.tourState;
         if (!ts) return false;
@@ -86,18 +89,6 @@
                 }
             });
 
-            // THUMBSTICK (Joystick)
-            controller.addEventListener('thumbstickmoved', function (event) {
-                var x = event.data.axes[0] || 0;
-                var y = event.data.axes[1] || 0;
-                var magnitude = Math.sqrt(x * x + y * y);
-                if (magnitude > 0.3) {
-                    if (window.handleXRJoystick) {
-                        window.handleXRJoystick(event, this.userData.index);
-                    }
-                }
-            });
-
             // BUTTON A/X
             controller.addEventListener('buttondown', function (event) {
                 if (event.button === 2) {
@@ -109,11 +100,14 @@
                 }
             });
 
+            // Le joystick est désormais géré par le polling dans pollXRGamepads()
+            // Plus besoin d'écouteur 'thumbstickmoved' (inexistant dans Three.js r128)
+
             controllers.push(controller);
         }
 
         window.tourState.xrControllers = controllers;
-        console.log('[XR] Meta Quest controllers initialized');
+        console.log('[XR] Meta Quest controllers initialized (joystick via polling)');
     }
 
     function vectorFromConfig(position) {
@@ -387,6 +381,10 @@
 
         if (frame && window.tourState.isXRActive) {
             applyXRPositionalOffset(frame);
+            // Polling des joysticks à chaque frame
+            if (window.pollXRGamepads) {
+                window.pollXRGamepads();
+            }
         }
 
         window.tourState.renderer.render(window.tourState.scene, window.tourState.camera);
@@ -424,6 +422,23 @@
     function onXRSessionStart() {
         window.tourState.isXRActive = true;
         console.log('[XR] Session started');
+
+        // Décalage vertical de la sphère et des hotspots pour aligner le sol virtuel
+        // avec le sol physique (hauteur des yeux ~1.6m)
+        var offset = VR_EYE_HEIGHT;
+        var sphere = window.tourState.sphere;
+        var sphere2 = window.tourState.sphere2;
+        if (sphere) sphere.position.y = offset;
+        if (sphere2) sphere2.position.y = offset;
+
+        // Décaler les groupes de hotspots s'ils existent
+        if (window.tourState.hotspotGroup) {
+            window.tourState.hotspotGroup.position.y = offset;
+        }
+        if (window.tourState.groundHotspotGroup) {
+            window.tourState.groundHotspotGroup.position.y = offset;
+        }
+
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
@@ -436,6 +451,19 @@
     function onXRSessionEnd() {
         window.tourState.isXRActive = false;
         console.log('[XR] Session ended');
+
+        // Restaurer la position verticale de la sphère et des hotspots
+        var sphere = window.tourState.sphere;
+        var sphere2 = window.tourState.sphere2;
+        if (sphere) sphere.position.y = 0;
+        if (sphere2) sphere2.position.y = 0;
+        if (window.tourState.hotspotGroup) {
+            window.tourState.hotspotGroup.position.y = 0;
+        }
+        if (window.tourState.groundHotspotGroup) {
+            window.tourState.groundHotspotGroup.position.y = 0;
+        }
+
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
@@ -524,6 +552,7 @@
     window.setupXRControllers = setupXRControllers;
     window.onXRSessionStart = onXRSessionStart;
     window.onXRSessionEnd = onXRSessionEnd;
+    window.VR_EYE_HEIGHT = VR_EYE_HEIGHT;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

@@ -17,6 +17,7 @@
         };
     }
 
+    var VR_EYE_HEIGHT = 1.6; // hauteur des yeux en mètres
     var vrUiGroup = null;
     var exitButton = null;
     var vrInfoPanel = null;
@@ -131,7 +132,7 @@
         });
 
         exitButton = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.12), material);
-        exitButton.position.set(0, -0.5, -1.8); // In front, slightly below center
+        exitButton.position.set(0, 0, -1.8); // position relative au groupe, qui sera placé à hauteur des yeux
         exitButton.userData = { action: 'exitVR', isVRButton: true };
         exitButton.renderOrder = 10;
         vrUiGroup.add(exitButton);
@@ -222,7 +223,7 @@
     }
 
     // ==============================================================
-    //  Enter VR - with 'local-floor' for proper height
+    //  Enter VR - with manual height offset (no local-floor reliance)
     // ==============================================================
     function enterVR() {
         if (isEnteringVR) return;
@@ -249,8 +250,9 @@
                 return;
             }
 
-            renderer.xr.setReferenceSpaceType('local-floor');
-
+            // On ne force plus le reference space 'local-floor' car on gère manuellement
+            // la hauteur via le décalage de la sphère et des hotspots.
+            // On garde la demande de session avec les features requises par sécurité.
             navigator.xr.requestSession('immersive-vr', {
                 requiredFeatures: ['local-floor']
             }).then(function (session) {
@@ -267,7 +269,7 @@
                         renderer.xr.setFoveation(1);
                     }
 
-                    console.log('[VR] Session démarrée avec local-floor');
+                    console.log('[VR] Session démarrée (hauteur gérée manuellement)');
                 }).catch(function (err) {
                     console.error('[VR] Erreur setSession:', err);
                     isEnteringVR = false;
@@ -289,7 +291,7 @@
     }
 
     // ==============================================================
-    //  Update VR UI - Follows the user's view
+    //  Update VR UI - Follows the user's view with fixed height
     // ==============================================================
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -300,22 +302,23 @@
         var camera = window.tourState.camera;
         if (!camera) return;
 
-        // Get camera position and forward direction
-        var position = new THREE.Vector3();
-        camera.getWorldPosition(position);
-
+        // Positionner l'UI à hauteur des yeux (VR_EYE_HEIGHT) et à une distance fixe
+        // devant la caméra, dans la direction du regard.
         var forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
         forward.normalize();
 
-        // Position UI in front of the user at a fixed distance
-        var uiPosition = position.clone().add(forward.clone().multiplyScalar(1.8));
-        uiPosition.y -= 0.3; // Slightly below eye level
+        // Position absolue : à hauteur VR_EYE_HEIGHT, dans la direction forward à 1.8m
+        var position = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
+        position.add(forward.clone().multiplyScalar(1.8));
 
-        vrUiGroup.position.copy(uiPosition);
-        vrUiGroup.lookAt(position);
-        vrUiGroup.rotateY(Math.PI);
+        vrUiGroup.position.copy(position);
+        // Orienter le groupe vers la caméra (pour que le texte soit lisible)
+        var target = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
+        vrUiGroup.lookAt(target);
+        vrUiGroup.rotateY(Math.PI); // retourner pour faire face à la caméra
+
         vrUiGroup.visible = true;
 
         // Update info panel if visible
@@ -440,19 +443,17 @@
         var camera = window.tourState.camera;
         if (!camera) return;
 
-        var position = new THREE.Vector3();
-        camera.getWorldPosition(position);
-
         var forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
         forward.normalize();
 
-        var panelPosition = position.clone().add(forward.clone().multiplyScalar(2.5));
-        panelPosition.y += 0.1;
+        var panelPosition = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
+        panelPosition.add(forward.clone().multiplyScalar(2.5));
 
         vrInfoPanel.mesh.position.copy(panelPosition);
-        vrInfoPanel.mesh.lookAt(position);
+        var target = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
+        vrInfoPanel.mesh.lookAt(target);
         vrInfoPanel.mesh.rotateY(Math.PI);
     }
 

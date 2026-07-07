@@ -11,23 +11,43 @@
         console.log('[XR] Controls module initialized');
     }
 
-    function handleXRJoystick(event, controllerIndex) {
-        var x = event.data.axes[0] || 0;
-        var y = event.data.axes[1] || 0;
+    /**
+     * Polling des gamepads XR pour lire les joysticks.
+     * Cette fonction est appelée à chaque frame en mode VR.
+     */
+    function pollXRGamepads() {
+        if (!window.tourState.isXRActive) return;
 
-        var magnitude = Math.sqrt(x * x + y * y);
-        if (magnitude < joystickDeadZone) {
-            return;
-        }
+        var renderer = window.tourState.renderer;
+        if (!renderer) return;
 
-        if (window.tourState.isXRActive) {
-            if (window.moveGroundArrowWithJoystick) {
-                window.moveGroundArrowWithJoystick(x, y);
+        var session = renderer.xr.getSession();
+        if (!session) return;
+
+        var inputSources = session.inputSources;
+        if (!inputSources) return;
+
+        for (var i = 0; i < inputSources.length; i++) {
+            var source = inputSources[i];
+            var gamepad = source.gamepad;
+            if (!gamepad) continue;
+
+            var axes = gamepad.axes;
+            if (axes && axes.length >= 2) {
+                var x = axes[0] || 0;
+                var y = axes[1] || 0;
+                var magnitude = Math.sqrt(x * x + y * y);
+
+                if (magnitude > joystickDeadZone) {
+                    if (window.moveGroundArrowWithJoystick) {
+                        window.moveGroundArrowWithJoystick(x, y);
+                    }
+                    window.tourState.lastInteractionTime = Date.now();
+                }
             }
-            window.tourState.lastInteractionTime = Date.now();
         }
     }
 
     window.initXRControls = initXRControls;
-    window.handleXRJoystick = handleXRJoystick;
+    window.pollXRGamepads = pollXRGamepads;
 })();
