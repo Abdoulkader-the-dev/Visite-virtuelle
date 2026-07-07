@@ -36,6 +36,8 @@
         }
     }
 
+    // Cette fonction n'est plus nécessaire avec la gestion de hauteur manuelle
+    /*
     function applyXRPositionalOffset(frame) {
         var renderer = window.tourState.renderer;
         if (!xrBaseReferenceSpace) return;
@@ -48,6 +50,7 @@
         var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
         renderer.xr.setReferenceSpace(offsetReferenceSpace);
     }
+    */
 
     // ==============================================================
     //  META QUEST CONTROLLER SETUP
@@ -60,7 +63,7 @@
         if (window.tourState.xrControllers) {
             window.tourState.xrControllers.forEach(function (ctrl) {
                 if (ctrl && ctrl.parent) {
-                    ctrl.removeFromParent();
+                    ctrl.parent.remove(ctrl);
                 }
             });
         }
@@ -69,6 +72,26 @@
         for (var i = 0; i < 2; i++) {
             var controller = renderer.xr.getController(i);
             controller.userData = { index: i };
+
+            // Ajout du modèle de laser
+            var geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
+            var material = new THREE.LineBasicMaterial({
+                color: 0xffffff,
+                linewidth: 2,
+                transparent: true,
+                opacity: 0.5
+            });
+            var line = new THREE.Line(geometry, material);
+            line.name = 'line';
+            line.scale.z = 5;
+            controller.add(line);
+
+            // Ajout du réticule de visée
+            var reticleGeo = new THREE.RingGeometry(0.02, 0.03, 32);
+            var reticleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 });
+            var reticle = new THREE.Mesh(reticleGeo, reticleMat);
+            reticle.position.z = -1;
+            controller.add(reticle);
 
             // Add to scene
             window.tourState.scene.add(controller);
@@ -81,6 +104,11 @@
                 }
             });
 
+            controller.addEventListener('selectend', function (event) {
+                console.log('[XR] Trigger released');
+                // Vous pouvez ajouter une logique ici si nécessaire
+            });
+
             // SQUEEZE (Grip)
             controller.addEventListener('squeezestart', function () {
                 console.log('[XR] Grip pressed');
@@ -89,25 +117,11 @@
                 }
             });
 
-            // BUTTON A/X
-            controller.addEventListener('buttondown', function (event) {
-                if (event.button === 2) {
-                    console.log('[XR] Button A/X pressed');
-                    var menu = document.getElementById('nav-menu');
-                    if (menu) {
-                        menu.classList.toggle('open');
-                    }
-                }
-            });
-
-            // Le joystick est désormais géré par le polling dans pollXRGamepads()
-            // Plus besoin d'écouteur 'thumbstickmoved' (inexistant dans Three.js r128)
-
             controllers.push(controller);
         }
 
         window.tourState.xrControllers = controllers;
-        console.log('[XR] Meta Quest controllers initialized (joystick via polling)');
+        console.log('[XR] Meta Quest controllers initialized');
     }
 
     function vectorFromConfig(position) {
@@ -363,8 +377,13 @@
     }
 
     function renderFrame(timestamp, frame) {
-        updateAutoRotation();
-        updateCameraLookAt();
+        // La boucle de rendu principale
+        var isXR = window.tourState.isXRActive;
+
+        if (!isXR) {
+            updateAutoRotation();
+            updateCameraLookAt();
+        }
 
         if (window.updateHotspots) {
             window.updateHotspots();
@@ -379,9 +398,8 @@
             window.updateVRUI();
         }
 
-        if (frame && window.tourState.isXRActive) {
-            applyXRPositionalOffset(frame);
-            // Polling des joysticks à chaque frame
+        if (frame && isXR) {
+            // Polling des joysticks à chaque frame en mode VR
             if (window.pollXRGamepads) {
                 window.pollXRGamepads();
             }
@@ -421,6 +439,7 @@
     // ==============================================================
     function onXRSessionStart() {
         window.tourState.isXRActive = true;
+        document.body.classList.add('xr-active');
         console.log('[XR] Session started');
 
         // Décalage vertical de la sphère et des hotspots pour aligner le sol virtuel
@@ -442,26 +461,42 @@
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
+        if (window.showVRUI) {
+            window.showVRUI();
+        }
+
         // Setup controllers after session starts
         setTimeout(function () {
             setupXRControllers();
-        }, 100);
+        }, 500); // Léger délai pour s'assurer que tout est prêt
     }
 
     function onXRSessionEnd() {
         window.tourState.isXRActive = false;
+        document.body.classList.remove('xr-active');
         console.log('[XR] Session ended');
 
         // Restaurer la position verticale de la sphère et des hotspots
+        var offset = 0;
         var sphere = window.tourState.sphere;
         var sphere2 = window.tourState.sphere2;
-        if (sphere) sphere.position.y = 0;
-        if (sphere2) sphere2.position.y = 0;
+        if (sphere) sphere.position.y = offset;
+        if (sphere2) sphere2.position.y = offset;
         if (window.tourState.hotspotGroup) {
-            window.tourState.hotspotGroup.position.y = 0;
+            window.tourState.hotspotGroup.position.y = offset;
         }
         if (window.tourState.groundHotspotGroup) {
-            window.tourState.groundHotspotGroup.position.y = 0;
+            window.tourState.groundHotspotGroup.position.y = offset;
+        }
+
+        // Nettoyer les contrôleurs
+        if (window.tourState.xrControllers) {
+            window.tourState.xrControllers.forEach(function (ctrl) {
+                if (ctrl && ctrl.parent) {
+                    ctrl.parent.remove(ctrl);
+                }
+            });
+            window.tourState.xrControllers = [];
         }
 
         if (window.updateVRButtonState) {
@@ -473,8 +508,11 @@
         if (window.hideVRInfoPanel) {
             window.hideVRInfoPanel();
         }
+
+        // Réinitialiser la caméra 2D
         window.tourState.camera.position.set(0, 0, 0.001);
         window.tourState.camera.quaternion.identity();
+        updateCameraLookAt(); // S'assurer que la caméra 2D regarde dans la bonne direction
     }
 
     function init() {
@@ -487,13 +525,11 @@
         var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 0, 0.001);
 
-        var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, powerPreference: 'high-performance' });
+        var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
         renderer.outputEncoding = THREE.sRGBEncoding;
-        renderer.toneMapping = THREE.LinearToneMapping;
-        renderer.toneMappingExposure = 1.4;
 
         renderer.xr.addEventListener('sessionstart', onXRSessionStart);
         renderer.xr.addEventListener('sessionend', onXRSessionEnd);
@@ -518,18 +554,11 @@
         window.tourState.sphere2 = sphere2;
         window.tourState.isXRActive = false;
 
-        if (window.initControls) {
-            window.initControls();
-        }
-        if (window.initUI) {
-            window.initUI();
-        }
-        if (window.initVRUI) {
-            window.initVRUI();
-        }
-        if (window.initXRControls) {
-            window.initXRControls();
-        }
+        // Initialisation des différents modules
+        if (window.initControls) window.initControls();
+        if (window.initUI) window.initUI();
+        if (window.initVRUI) window.initVRUI();
+        if (window.initXRControls) window.initXRControls();
 
         window.addEventListener('resize', onResize);
 
@@ -542,6 +571,8 @@
             window.tourState.lat = startParams.lat;
             preloadAllScenes();
         });
+
+        // Démarrage de la boucle de rendu
         renderer.setAnimationLoop(renderFrame);
     }
 
