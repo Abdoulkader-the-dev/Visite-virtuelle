@@ -478,9 +478,3 @@ Le fichier `Cahier des Charges Technique - Visite Virtuelle WebXR 360.md` doit �
 - Touch events avec `passive: false` pour éviter le scroll
 - `prefers-reduced-motion` non implémenté (à ajouter pour accessibilité)
 - Viewport meta tag pour mobile
-
----
-
-## Licence
-
-Projet éducatif / démonstration de techniques de navigation 360°. Three.js est sous licence MIT.
