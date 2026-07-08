@@ -129,12 +129,6 @@
     // ==============================================================
     //  Build VR UI — 3D HUD with Previous / Next / Exit VR panels
     // ==============================================================
-    //  These replace the 2D HTML controls while in VR (the HTML overlay is
-    //  hidden via body.xr-active in style.css). The whole group is
-    //  repositioned every frame in updateVRUI() to stay ~2m in front of the
-    //  user at eye level, and the controller lasers (xr-laser.js) raycast
-    //  against window.vrHudPanels to know what's being pointed at.
-    // ==============================================================
     function buildVRUI() {
         if (vrUiGroup) { return; }
 
@@ -267,11 +261,6 @@
                 return;
             }
 
-            // No positional reference space is required: the renderer uses the
-            // mandatory 'viewer' reference space (rotation-only, origin pinned at
-            // the camera) so the panorama never distorts. 'local-floor' is only
-            // requested optionally, purely so Quest can report a nicer starting
-            // pose if available — the tour doesn't depend on it.
             navigator.xr.requestSession('immersive-vr', {
                 optionalFeatures: ['local-floor']
             }).then(function (session) {
@@ -312,13 +301,6 @@
     // ==============================================================
     //  Update VR UI - Follows the user's actual head position/gaze
     // ==============================================================
-    //  The HUD is re-anchored to the camera's *real* current position each
-    //  frame (not a hardcoded eye-height constant) — the camera already sits
-    //  at whatever height the 'local' XR reference space reports, which is
-    //  coincident with the panorama sphere's center. Anchoring to a fixed
-    //  world Y would drift out of reach if the sphere/camera pairing ever
-    //  moves, so we always read camera.position directly.
-    // ==============================================================
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
             if (vrUiGroup) vrUiGroup.visible = false;
@@ -337,13 +319,11 @@
         position.add(forward.clone().multiplyScalar(1.8));
 
         vrUiGroup.position.copy(position);
-        // Orienter le groupe vers la caméra (pour que le texte soit lisible)
         vrUiGroup.lookAt(camera.position);
-        vrUiGroup.rotateY(Math.PI); // retourner pour faire face à la caméra
+        vrUiGroup.rotateY(Math.PI);
 
         vrUiGroup.visible = true;
 
-        // Update info panel if visible
         if (vrInfoVisible && vrInfoMesh) {
             updateVRInfoPanelPosition();
         }
@@ -374,10 +354,6 @@
             window.tourState.scene.add(vrInfoMesh);
         }
 
-        // NOTE: `vrInfoPanel` itself was previously never assigned here — every
-        // function below (showVRInfoPanel, checkVRInfoPanelClose, ...) reads the
-        // *local* vrInfoPanel variable, not the individual vrInfoCanvas/Mesh/etc
-        // fields, so it stayed null forever and info-hotspot clicks in VR threw.
         vrInfoPanel = {
             mesh: vrInfoMesh,
             canvas: vrInfoCanvas,
@@ -397,7 +373,6 @@
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Background
         ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
         ctx.beginPath();
         ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
@@ -409,7 +384,6 @@
         ctx.roundRect(10, 10, canvas.width - 20, canvas.height - 20, 16);
         ctx.stroke();
 
-        // Icon circle
         ctx.fillStyle = '#3B82F6';
         ctx.beginPath();
         ctx.arc(72, 72, 36, 0, Math.PI * 2);
@@ -421,13 +395,11 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(hotspot.icon || 'i', 72, 72);
 
-        // Title
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 38px system-ui';
         ctx.fillText(hotspot.title || 'Information', 130, 68);
 
-        // Description with word wrap
         ctx.font = '28px system-ui';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         var words = (hotspot.description || '').split(' ');
@@ -445,7 +417,6 @@
         }
         ctx.fillText(line, 40, y);
 
-        // Close button
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.fillRect(canvas.width - 60, 20, 40, 40);
         ctx.fillStyle = '#ffffff';
@@ -528,9 +499,6 @@
         return vrButtonElement;
     }
 
-    // ==============================================================
-    //  Error handling
-    // ==============================================================
     window.addEventListener('unhandledrejection', function (event) {
         var reason = event.reason && event.reason.message ? event.reason.message : '';
         if (reason.indexOf('reference space') !== -1 && window.tourState.isXRActive) {
@@ -539,9 +507,6 @@
         }
     });
 
-    // ==============================================================
-    //  EXPOSE
-    // ==============================================================
     window.updateVRUI = updateVRUI;
     window.initVRUI = initVRUI;
     window.buildVRUI = buildVRUI;

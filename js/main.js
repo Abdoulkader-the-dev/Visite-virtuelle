@@ -34,62 +34,15 @@
     // ==============================================================
     //  META QUEST CONTROLLER SETUP
     // ==============================================================
+
+    // This function is now defined in xr-controls.js, but we keep a local wrapper
+    // for backward compatibility. The actual implementation is in xr-controls.js.
     function setupXRControllers() {
-        var renderer = window.tourState.renderer;
-        if (!renderer) return;
-
-        // Remove old controllers
-        if (window.tourState.xrControllers) {
-            window.tourState.xrControllers.forEach(function (ctrl) {
-                if (ctrl && ctrl.parent) {
-                    ctrl.removeFromParent();
-                }
-            });
+        if (window.setupXRControllersImpl) {
+            window.setupXRControllersImpl();
+        } else {
+            console.warn('[XR] setupXRControllersImpl not found');
         }
-
-        var controllers = [];
-        for (var i = 0; i < 2; i++) {
-            var controller = renderer.xr.getController(i);
-            controller.userData = { index: i };
-
-            // Add to scene
-            window.tourState.scene.add(controller);
-
-            // SELECT (Trigger)
-            controller.addEventListener('selectstart', function (event) {
-                console.log('[XR] Trigger pressed');
-                if (window.handleXRSelect) {
-                    window.handleXRSelect(this);
-                }
-            });
-
-            // SQUEEZE (Grip)
-            controller.addEventListener('squeezestart', function () {
-                console.log('[XR] Grip pressed');
-                if (window.goBack) {
-                    window.goBack();
-                }
-            });
-
-            // BUTTON A/X
-            controller.addEventListener('buttondown', function (event) {
-                if (event.button === 2) {
-                    console.log('[XR] Button A/X pressed');
-                    var menu = document.getElementById('nav-menu');
-                    if (menu) {
-                        menu.classList.toggle('open');
-                    }
-                }
-            });
-
-            // Le joystick est désormais géré par le polling dans pollXRGamepads()
-            // Plus besoin d'écouteur 'thumbstickmoved' (inexistant dans Three.js r128)
-
-            controllers.push(controller);
-        }
-
-        window.tourState.xrControllers = controllers;
-        console.log('[XR] Meta Quest controllers initialized (joystick via polling)');
     }
 
     function vectorFromConfig(position) {
@@ -259,6 +212,10 @@
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
 
+            // --- Apply defaultLat (horizon alignment) ---
+            var defaultLat = sceneConfig.defaultLat || 0;
+            window.tourState.sphere.rotation.x = -defaultLat * Math.PI / 180;
+
             if (options.isInitialLoad && typeof sceneConfig.defaultBearing === 'number') {
                 window.tourState.lon = ((sceneConfig.defaultBearing % 360) + 360) % 360;
             } else if (typeof options.initialLon === 'number') {
@@ -409,17 +366,7 @@
         window.tourState.isXRActive = true;
         console.log('[XR] Session started');
 
-        // IMPORTANT: the sphere must stay exactly coincident with the camera's
-        // XR origin. These are equirectangular photos — the viewer has to sit at
-        // the mathematical center of the sphere or the image warps (this was the
-        // cause of the "insect view" / scale-distortion bug). We do NOT shift the
-        // sphere or hotspot groups vertically (see init() for details on why the
-        // default 'local' reference space already puts the camera at (0,0,0)).
-
-        // Hide the 2D HTML overlay: body.xr-active drives the CSS rules in
-        // style.css that hide #nav-menu, #minimap, #compass, #info-card, etc.
-        // (previously this class was never toggled, so the DOM stayed on top of
-        // the WebXR canvas and ate all input — bug #3 from the report).
+        // Hide 2D UI overlay
         document.body.classList.add('xr-active');
 
         if (window.updateVRButtonState) {
@@ -428,11 +375,11 @@
         if (window.showVRUI) {
             window.showVRUI();
         }
+
         // Setup controllers after session starts
         setTimeout(function () {
-            setupXRControllers();
-            if (window.setupXRLasers) {
-                window.setupXRLasers(window.tourState.xrControllers);
+            if (window.setupXRControllers) {
+                window.setupXRControllers();
             }
         }, 100);
     }
@@ -443,8 +390,8 @@
 
         document.body.classList.remove('xr-active');
 
-        if (window.clearXRLasers) {
-            window.clearXRLasers();
+        if (window.clearXRControllers) {
+            window.clearXRControllers();
         }
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
@@ -473,15 +420,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
-        // Three.js defaults renderer.xr to the 'local' reference space, whose
-        // Y=0 plane is defined at the headset's height when the session starts
-        // — i.e. camera position starts at (0,0,0), exactly coincident with the
-        // sphere's center. We deliberately do NOT shift the sphere afterwards
-        // (see onXRSessionStart/onXRSessionEnd) and do NOT hand-place the
-        // camera at a hardcoded 1.6m — for an equirectangular photo sphere the
-        // camera must stay at the sphere's mathematical center or the image
-        // warps. That mismatch (sphere shifted +1.6m, camera left near 0) was
-        // the actual cause of the "insect view" scale-distortion bug.
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;

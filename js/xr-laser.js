@@ -4,17 +4,6 @@
     // ========================================================================
     //  XR LASER POINTERS — visible controller rays + hit reticle
     // ========================================================================
-    //  One laser (THREE.Line) is attached as a CHILD of each Meta Quest
-    //  controller object returned by renderer.xr.getController(i). Three.js's
-    //  WebXR manager updates that controller's position/rotation every frame
-    //  from the real controller pose, so anything parented to it (our laser)
-    //  automatically follows the hand in real time — no manual polling needed
-    //  for the beam itself.
-    //
-    //  A small sphere "reticle" is kept in world space (added directly to the
-    //  scene, not to the controller) and repositioned every frame to the exact
-    //  raycast hit point, giving the user feedback on what they're aiming at.
-    // ========================================================================
 
     var LASER_LENGTH = 10; // meters
     var laserEntries = []; // [{ controller, line, reticle }]
@@ -85,9 +74,6 @@
         console.log('[XR] ' + laserEntries.length + ' laser(s) attached to controllers');
     }
 
-    // Builds a fresh raycaster from a controller's current world transform.
-    // Used both for the per-frame hover reticle and for the one-shot
-    // trigger (selectstart) hit test in hotspots.js.
     function raycasterFromController(controller) {
         var raycaster = new THREE.Raycaster();
         reusableMatrix.identity().extractRotation(controller.matrixWorld);
@@ -97,12 +83,8 @@
         return raycaster;
     }
 
-    // Everything the laser is allowed to interact with: HUD panels
-    // (Previous / Next / Exit VR), the floor navigation hotspots, and the
-    // VR info panel (when open, so its close button is reachable).
     function interactableTargets() {
         var targets = [];
-
         if (window.vrHudPanels && window.vrHudPanels.length) {
             targets = targets.concat(window.vrHudPanels);
         }
@@ -112,7 +94,6 @@
         if (window.vrInfoPanel && window.vrInfoPanel.mesh && window.vrInfoPanel.mesh.visible) {
             targets.push(window.vrInfoPanel.mesh);
         }
-
         return targets;
     }
 
