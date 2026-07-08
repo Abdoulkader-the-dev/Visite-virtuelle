@@ -25,10 +25,10 @@
     var vrButtonElement = null;
     var isEnteringVR = false;
 
-    // HUD panel dimensions
-    var PANEL_WIDTH = 0.5;
-    var PANEL_HEIGHT = 0.19;
-    var PANEL_DISTANCE = 3.0; // increased to 3 meters
+    // HUD panel dimensions (Exit button only)
+    var PANEL_WIDTH = 0.4;
+    var PANEL_HEIGHT = 0.15;
+    var PANEL_DISTANCE = 3.0;
 
     // --------------------------------------------------------------
     //  SUPPORT CHECK
@@ -143,13 +143,13 @@
 
         var dist = PANEL_DISTANCE;
 
-        // Only Exit button, placed centered below
+        // Exit button, shifted down (y = -0.2) and resized
         exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', PANEL_WIDTH, PANEL_HEIGHT);
-        exitButton.position.set(0, 0, -dist);
+        exitButton.position.set(0, -0.2, -dist);
         vrUiGroup.add(exitButton);
 
         window.vrExitButton = exitButton;
-        window.vrHudPanels = [exitButton]; // only one panel
+        window.vrHudPanels = [exitButton];
 
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrUiGroup);

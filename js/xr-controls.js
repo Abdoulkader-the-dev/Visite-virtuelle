@@ -10,7 +10,7 @@
     }
 
     // --------------------------------------------------------------
-    //  POLL GAMEPADS (joystick input)
+    //  POLL GAMEPADS (joystick input) — now does NOT move arrow
     // --------------------------------------------------------------
     function pollXRGamepads() {
         if (!window.tourState.isXRActive) return;
@@ -24,25 +24,10 @@
         var inputSources = session.inputSources;
         if (!inputSources) return;
 
-        for (var i = 0; i < inputSources.length; i++) {
-            var source = inputSources[i];
-            var gamepad = source.gamepad;
-            if (!gamepad) continue;
-
-            var axes = gamepad.axes;
-            if (axes && axes.length >= 2) {
-                var x = axes[0] || 0;
-                var y = axes[1] || 0;
-                var magnitude = Math.sqrt(x * x + y * y);
-
-                if (magnitude > joystickDeadZone) {
-                    if (window.moveGroundArrowWithJoystick) {
-                        window.moveGroundArrowWithJoystick(x, y);
-                    }
-                    window.tourState.lastInteractionTime = Date.now();
-                }
-            }
-        }
+        // We no longer move the arrow with joystick.
+        // The arrow is now driven by the laser.
+        // The joystick could be used for other things (camera rotation) but we'll just ignore.
+        // Keep this function for future use, but nothing is done.
     }
 
     // --------------------------------------------------------------
@@ -51,13 +36,11 @@
     function clearXRControllers() {
         console.log('[XR] Clearing controllers...');
 
-        // 1. Remove all controllers from the scene
         if (window.tourState.xrControllers) {
             window.tourState.xrControllers.forEach(function (ctrl) {
                 if (ctrl && ctrl.parent) {
                     ctrl.removeFromParent();
                 }
-                // Dispose children (lasers, models, etc.)
                 while (ctrl && ctrl.children.length > 0) {
                     var child = ctrl.children[0];
                     ctrl.remove(child);
@@ -71,12 +54,10 @@
             window.tourState.xrControllers = [];
         }
 
-        // 2. Clear lasers (via xr-laser module)
         if (window.clearXRLasers) {
             window.clearXRLasers();
         }
 
-        // 3. CLEAR THREE.JS CONTROLLER CACHE — key for re-entry
         var renderer = window.tourState.renderer;
         if (renderer && renderer.xr && renderer.xr.controllers) {
             renderer.xr.controllers = [];
@@ -114,9 +95,6 @@
             controller.userData = { index: i, active: true };
 
             window.tourState.scene.add(controller);
-
-            // Remove any previous listeners by cloning? Better to use fresh controller.
-            // We'll attach new listeners.
 
             controller.addEventListener('selectstart', function onSelectStart(event) {
                 if (!window.tourState.isXRActive) {
