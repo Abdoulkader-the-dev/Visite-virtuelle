@@ -23,33 +23,9 @@
     <div id="transition-overlay"></div>
 
     <div id="hotspot-container">
-        <!--
-            FLOOR NAVIGATION HOTSPOT — Style Google Street View
-            ====================================================
-            3 éléments visuels cohabitent sur le sol du panorama :
-
-            1. #camera-marker  → Croix X blanche fixe au centre de l'écran,
-                                 indique la position actuelle de la caméra.
-                                 Toujours visible quand la souris est sur le sol.
-
-            2. #floor-hotspot  → Ellipse plate + flèche directionnelle qui suit
-                                 la souris. La flèche pointe vers la scène cible.
-                                 Apparaît uniquement quand la souris est sur le sol.
-
-            3. #dir-arrows     → Paire de flèches plates (haut/bas) au centre de
-                                 l'écran permettant d'avancer/reculer sans tourner
-                                 la caméra. Cliquables indépendamment.
-
-            MODIFIER LE STYLE        → css/style.css, section "Floor hotspot"
-            MODIFIER LA DIRECTION    → js/hotspots.js, fonction computeArrowAngle()
-            MODIFIER LES HOTSPOTS   → js/config.js, tableau hotspots[] de chaque scène
-        -->
-
-        <!-- 2. Hotspot de navigation : ellipse plate + flèche directionnelle -->
         <div id="floor-hotspot">
             <svg id="floor-arrow-svg" viewBox="0 0 128 74" width="128" height="74" xmlns="http://www.w3.org/2000/svg"
                 aria-hidden="true">
-                <!-- Chevron épais façon Street View (angle 90°) -->
                 <path d="M 64 5 L 114 55 L 94 75 L 64 45 L 34 75 L 14 55 Z" fill="rgba(200, 200, 200, 0.6)" />
             </svg>
             <div id="floor-hotspot-label" style="display: none;"></div>
@@ -142,7 +118,8 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
+    </script>
     <script src="js/gsap.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/state.js"></script>

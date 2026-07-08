@@ -1,3 +1,6 @@
+// =============================================================================
+//  main.js  —  Fixed: ensure controllers are reset on each VR session
+// =============================================================================
 (function () {
     'use strict';
 
@@ -28,20 +31,6 @@
             }
             texture.dispose();
             textureCache.delete(key);
-        }
-    }
-
-    // ==============================================================
-    //  META QUEST CONTROLLER SETUP
-    // ==============================================================
-
-    // This function is now defined in xr-controls.js, but we keep a local wrapper
-    // for backward compatibility. The actual implementation is in xr-controls.js.
-    function setupXRControllers() {
-        if (window.setupXRControllersImpl) {
-            window.setupXRControllersImpl();
-        } else {
-            console.warn('[XR] setupXRControllersImpl not found');
         }
     }
 
@@ -212,7 +201,6 @@
             window.tourState.currentTexture = texture;
             window.tourState.currentScene = sceneId;
 
-            // --- Apply defaultLat (horizon alignment) ---
             var defaultLat = sceneConfig.defaultLat || 0;
             window.tourState.sphere.rotation.x = -defaultLat * Math.PI / 180;
 
@@ -319,12 +307,9 @@
         }
 
         if (frame && window.tourState.isXRActive) {
-            // Polling des joysticks à chaque frame
             if (window.pollXRGamepads) {
                 window.pollXRGamepads();
             }
-            // Met à jour les lasers des contrôleurs + le viseur (reticle) sur la
-            // cible pointée (panneaux HUD, hotspots au sol, panneau d'info)
             if (window.updateXRLasers) {
                 window.updateXRLasers();
             }
@@ -359,53 +344,89 @@
         };
     }
 
-    // ==============================================================
-    //  XR Session Management
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  XR SESSION MANAGEMENT — FIXED: clean reset on each entry
+    // --------------------------------------------------------------
     function onXRSessionStart() {
-        window.tourState.isXRActive = true;
-        console.log('[XR] Session started');
+        console.log('[XR] Session start event');
 
-        // Hide 2D UI overlay
+        // Reset XR state
+        window.tourState.isXRActive = true;
+
+        // Hide 2D UI
         document.body.classList.add('xr-active');
 
+        // Update VR button
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
+
+        // Show VR UI — this will rebuild if needed
         if (window.showVRUI) {
             window.showVRUI();
         }
 
-        // Setup controllers after session starts
+        // IMPORTANT: Clear any stale controllers first
+        if (window.clearXRControllers) {
+            window.clearXRControllers();
+        }
+
+        // Then set up fresh controllers after a short delay
+        // This gives the session time to fully initialize
         setTimeout(function () {
             if (window.setupXRControllers) {
                 window.setupXRControllers();
             }
-        }, 100);
+            // Ensure UI panels are registered for raycasting
+            if (window.ensureVRUIReady) {
+                window.ensureVRUIReady();
+            }
+            console.log('[XR] Controller setup complete');
+        }, 150);
     }
 
     function onXRSessionEnd() {
+        console.log('[XR] Session end event');
+
+        // Clear XR state
         window.tourState.isXRActive = false;
-        console.log('[XR] Session ended');
 
-        document.body.classList.remove('xr-active');
-
-        if (window.clearXRControllers) {
-            window.clearXRControllers();
-        }
-        if (window.updateVRButtonState) {
-            window.updateVRButtonState(true);
-        }
+        // Hide VR UI
         if (window.hideVRUI) {
             window.hideVRUI();
         }
         if (window.hideVRInfoPanel) {
             window.hideVRInfoPanel();
         }
+
+        // CRITICAL: Clean up controllers and lasers
+        if (window.clearXRControllers) {
+            window.clearXRControllers();
+        }
+
+        // Destroy VR UI so it's rebuilt fresh on next entry
+        if (window.destroyVRUI) {
+            window.destroyVRUI();
+        }
+
+        // Restore 2D UI
+        document.body.classList.remove('xr-active');
+
+        // Update VR button
+        if (window.updateVRButtonState) {
+            window.updateVRButtonState(true);
+        }
+
+        // Reset camera for 2D mode
         window.tourState.camera.position.set(0, 0, 0.001);
         window.tourState.camera.quaternion.identity();
+
+        console.log('[XR] Session end cleanup complete');
     }
 
+    // --------------------------------------------------------------
+    //  INIT
+    // --------------------------------------------------------------
     function init() {
         normalizeConfigPositions();
 
@@ -424,6 +445,7 @@
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
 
+        // XR session events
         renderer.xr.addEventListener('sessionstart', onXRSessionStart);
         renderer.xr.addEventListener('sessionend', onXRSessionEnd);
 
@@ -471,6 +493,7 @@
             window.tourState.lat = startParams.lat;
             preloadAllScenes();
         });
+
         renderer.setAnimationLoop(renderFrame);
     }
 
@@ -478,7 +501,6 @@
     window.preloadAllScenes = preloadAllScenes;
     window.updateCameraLookAt = updateCameraLookAt;
     window.createSphere = createSphere;
-    window.setupXRControllers = setupXRControllers;
     window.onXRSessionStart = onXRSessionStart;
     window.onXRSessionEnd = onXRSessionEnd;
 

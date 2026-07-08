@@ -1,9 +1,8 @@
+// =============================================================================
+//  vr-ui.js  —  Fixed: rebuild UI on each session, proper button click
+// =============================================================================
 (function () {
     'use strict';
-
-    // =========================================================================
-    //  VR UI — HUD with "Exit VR" button properly positioned
-    // =========================================================================
 
     if (!CanvasRenderingContext2D.prototype.roundRect) {
         CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
@@ -31,6 +30,15 @@
     var vrButtonElement = null;
     var isEnteringVR = false;
 
+    // HUD panel dimensions
+    var PANEL_WIDTH = 0.5;
+    var PANEL_HEIGHT = 0.19;
+    var PANEL_SPACING = 0.28;
+    var PANEL_DISTANCE = 1.8;
+
+    // --------------------------------------------------------------
+    //  SUPPORT CHECK
+    // --------------------------------------------------------------
     function checkVRSupport() {
         if (!navigator.xr) {
             console.warn('[VR] WebXR non supporté');
@@ -59,7 +67,6 @@
         if (!vrButtonElement) {
             vrButtonElement = document.getElementById('vr-button');
         }
-
         if (!vrButtonElement) return;
 
         if (!available && !window.tourState.isXRActive) {
@@ -80,9 +87,9 @@
         }
     }
 
-    // ==============================================================
-    //  Build VR UI - Exit button properly positioned
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  BUILD HUD PANEL TEXTURE
+    // --------------------------------------------------------------
     function makeHudPanelTexture(label, accent) {
         var canvas = document.createElement('canvas');
         canvas.width = 256;
@@ -117,53 +124,104 @@
             transparent: true,
             side: THREE.DoubleSide,
             depthWrite: false,
-            depthTest: false,
+            depthTest: true,
             opacity: 1
         });
         var mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-        mesh.userData = { action: action, isVRButton: true };
+        mesh.userData = {
+            action: action,
+            isVRButton: true,
+            label: label
+        };
         mesh.renderOrder = 10;
+        // Ensure the mesh is always interactive
+        mesh.raycast = THREE.Mesh.prototype.raycast;
         return mesh;
     }
 
-    // ==============================================================
-    //  Build VR UI — 3D HUD with Previous / Next / Exit VR panels
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  BUILD / REBUILD VR UI
+    // --------------------------------------------------------------
     function buildVRUI() {
-        if (vrUiGroup) { return; }
+        // Remove old UI if it exists
+        destroyVRUI();
 
         vrUiGroup = new THREE.Group();
         vrUiGroup.name = 'vr-ui-hud';
 
-        prevButton = makeHudPanel('◀ Précédent', 'rgba(59, 130, 246, 0.6)', 'previous', 0.5, 0.19);
-        prevButton.position.set(-0.62, 0, -1.8);
+        var spacing = PANEL_SPACING;
+        var dist = PANEL_DISTANCE;
+
+        prevButton = makeHudPanel('◀ Précédent', 'rgba(59, 130, 246, 0.6)', 'previous', PANEL_WIDTH, PANEL_HEIGHT);
+        prevButton.position.set(-spacing, 0, -dist);
         vrUiGroup.add(prevButton);
 
-        nextButton = makeHudPanel('Suivant ▶', 'rgba(59, 130, 246, 0.6)', 'next', 0.5, 0.19);
-        nextButton.position.set(0.62, 0, -1.8);
+        nextButton = makeHudPanel('Suivant ▶', 'rgba(59, 130, 246, 0.6)', 'next', PANEL_WIDTH, PANEL_HEIGHT);
+        nextButton.position.set(spacing, 0, -dist);
         vrUiGroup.add(nextButton);
 
-        exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', 0.5, 0.19);
-        exitButton.position.set(0, -0.32, -1.8);
+        exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', PANEL_WIDTH, PANEL_HEIGHT);
+        exitButton.position.set(0, -PANEL_HEIGHT - 0.08, -dist);
         vrUiGroup.add(exitButton);
 
-        // Store references for hotspots.js / xr-laser.js
+        // Expose panels globally for raycasting
         window.vrExitButton = exitButton;
         window.vrHudPanels = [prevButton, nextButton, exitButton];
 
+        // Add to scene
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrUiGroup);
         }
 
-        console.log('[VR] 3D HUD built (Previous / Next / Exit VR)');
+        console.log('[VR] 3D HUD rebuilt (Previous / Next / Exit VR)');
+    }
+
+    function destroyVRUI() {
+        if (vrUiGroup) {
+            if (window.tourState && window.tourState.scene) {
+                window.tourState.scene.remove(vrUiGroup);
+            }
+            // Dispose children
+            vrUiGroup.children.forEach(function (child) {
+                if (child.material) {
+                    if (child.material.map) child.material.map = null;
+                    child.material.dispose();
+                }
+                if (child.geometry) child.geometry.dispose();
+            });
+            vrUiGroup = null;
+        }
+        window.vrHudPanels = null;
+        window.vrExitButton = null;
+        prevButton = null;
+        nextButton = null;
+        exitButton = null;
+    }
+
+    function ensureVRUIReady() {
+        if (!window.tourState.isXRActive) return;
+        if (!vrUiGroup) {
+            buildVRUI();
+        }
+        if (vrUiGroup) {
+            vrUiGroup.visible = true;
+            // Ensure panels are registered
+            if (window.vrHudPanels && window.vrHudPanels.length === 0) {
+                window.vrHudPanels = [prevButton, nextButton, exitButton];
+            }
+        }
     }
 
     function showVRUI() {
-        if (!vrUiGroup) { buildVRUI(); }
+        if (!vrUiGroup) {
+            buildVRUI();
+        }
         if (vrUiGroup) {
             vrUiGroup.visible = true;
-            updateVRButtonState(true);
+            // Re-register panels
+            window.vrHudPanels = [prevButton, nextButton, exitButton];
         }
+        updateVRButtonState(true);
     }
 
     function hideVRUI() {
@@ -173,69 +231,9 @@
         updateVRButtonState(true);
     }
 
-    function initVRUI() {
-        vrButtonElement = document.getElementById('vr-button');
-        if (vrButtonElement) {
-            var newButton = vrButtonElement.cloneNode(true);
-            vrButtonElement.parentNode.replaceChild(newButton, vrButtonElement);
-            vrButtonElement = newButton;
-
-            vrButtonElement.addEventListener('click', function (e) {
-                e.preventDefault();
-                toggleVR();
-            });
-        }
-
-        buildVRUI();
-        hideVRUI();
-        buildVRInfoPanel();
-        checkVRSupport();
-    }
-
-    function toggleVR() {
-        if (isEnteringVR) return;
-
-        if (window.tourState.isXRActive) {
-            doExitVR();
-        } else {
-            enterVR();
-        }
-    }
-
-    function doExitVR() {
-        var renderer = window.tourState.renderer;
-        if (!renderer) {
-            window.tourState.isXRActive = false;
-            updateVRButtonState(true);
-            if (window.hideVRUI) window.hideVRUI();
-            return;
-        }
-
-        var session = renderer.xr.getSession();
-        if (session) {
-            session.end().then(function () {
-                console.log('[VR] Session terminée');
-                updateVRButtonState(true);
-            }).catch(function (err) {
-                console.error('[VR] Erreur fin de session:', err);
-                window.tourState.isXRActive = false;
-                isEnteringVR = false;
-                hideVRUI();
-                hideVRInfoPanel();
-                updateVRButtonState(true);
-            });
-        } else {
-            window.tourState.isXRActive = false;
-            isEnteringVR = false;
-            hideVRUI();
-            hideVRInfoPanel();
-            updateVRButtonState(true);
-        }
-    }
-
-    // ==============================================================
-    //  Enter VR - with manual height offset (no local-floor reliance)
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  VR ENTRY / EXIT
+    // --------------------------------------------------------------
     function enterVR() {
         if (isEnteringVR) return;
 
@@ -266,10 +264,16 @@
             }).then(function (session) {
                 session.addEventListener('end', function () {
                     console.log('[VR] Session ended via event');
+                    // Ensure cleanup happens
+                    if (window.tourState.isXRActive) {
+                        window.doExitVR();
+                    }
                 });
 
                 renderer.xr.setSession(session).then(function () {
                     isEnteringVR = false;
+                    // Build fresh UI for this session
+                    buildVRUI();
                     showVRUI();
                     updateVRButtonState(true);
 
@@ -277,7 +281,7 @@
                         renderer.xr.setFoveation(1);
                     }
 
-                    console.log('[VR] Session démarrée (hauteur gérée manuellement)');
+                    console.log('[VR] Session démarrée');
                 }).catch(function (err) {
                     console.error('[VR] Erreur setSession:', err);
                     isEnteringVR = false;
@@ -298,9 +302,65 @@
         });
     }
 
-    // ==============================================================
-    //  Update VR UI - Follows the user's actual head position/gaze
-    // ==============================================================
+    function doExitVR() {
+        var renderer = window.tourState.renderer;
+        if (!renderer) {
+            window.tourState.isXRActive = false;
+            isEnteringVR = false;
+            hideVRUI();
+            hideVRInfoPanel();
+            updateVRButtonState(true);
+            return;
+        }
+
+        var session = renderer.xr.getSession();
+        if (session) {
+            session.end().then(function () {
+                console.log('[VR] Session terminée');
+                // Clean up controllers and UI
+                if (window.clearXRControllers) {
+                    window.clearXRControllers();
+                }
+                hideVRUI();
+                hideVRInfoPanel();
+                window.tourState.isXRActive = false;
+                isEnteringVR = false;
+                updateVRButtonState(true);
+                // Destroy UI so it's rebuilt fresh on next entry
+                destroyVRUI();
+                console.log('[VR] Clean exit complete');
+            }).catch(function (err) {
+                console.error('[VR] Erreur fin de session:', err);
+                window.tourState.isXRActive = false;
+                isEnteringVR = false;
+                hideVRUI();
+                hideVRInfoPanel();
+                updateVRButtonState(true);
+                destroyVRUI();
+            });
+        } else {
+            window.tourState.isXRActive = false;
+            isEnteringVR = false;
+            hideVRUI();
+            hideVRInfoPanel();
+            updateVRButtonState(true);
+            destroyVRUI();
+        }
+    }
+
+    function toggleVR() {
+        if (isEnteringVR) return;
+
+        if (window.tourState.isXRActive) {
+            doExitVR();
+        } else {
+            enterVR();
+        }
+    }
+
+    // --------------------------------------------------------------
+    //  UPDATE VR UI (position follows head)
+    // --------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
             if (vrUiGroup) vrUiGroup.visible = false;
@@ -316,7 +376,7 @@
         forward.normalize();
 
         var position = camera.position.clone();
-        position.add(forward.clone().multiplyScalar(1.8));
+        position.add(forward.clone().multiplyScalar(PANEL_DISTANCE + 0.2));
 
         vrUiGroup.position.copy(position);
         vrUiGroup.lookAt(camera.position);
@@ -329,10 +389,21 @@
         }
     }
 
-    // ==============================================================
-    //  VR Info Panel
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  VR INFO PANEL
+    // --------------------------------------------------------------
     function buildVRInfoPanel() {
+        // Clean old
+        if (vrInfoMesh && vrInfoMesh.parent) {
+            vrInfoMesh.parent.remove(vrInfoMesh);
+        }
+        if (vrInfoTexture) {
+            vrInfoTexture.dispose();
+        }
+        if (vrInfoMaterial) {
+            vrInfoMaterial.dispose();
+        }
+
         vrInfoCanvas = document.createElement('canvas');
         vrInfoCanvas.width = 768;
         vrInfoCanvas.height = 384;
@@ -417,6 +488,7 @@
         }
         ctx.fillText(line, 40, y);
 
+        // Close button
         ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.fillRect(canvas.width - 60, 20, 40, 40);
         ctx.fillStyle = '#ffffff';
@@ -482,6 +554,9 @@
         return true;
     }
 
+    // --------------------------------------------------------------
+    //  SETUP VR BUTTON (2D UI)
+    // --------------------------------------------------------------
     function setupVRButton() {
         if (!vrButtonElement) {
             vrButtonElement = document.getElementById('vr-button');
@@ -499,17 +574,30 @@
         return vrButtonElement;
     }
 
-    window.addEventListener('unhandledrejection', function (event) {
-        var reason = event.reason && event.reason.message ? event.reason.message : '';
-        if (reason.indexOf('reference space') !== -1 && window.tourState.isXRActive) {
-            console.error('[VR] Reference space error, exiting VR:', reason);
-            doExitVR();
+    function initVRUI() {
+        vrButtonElement = document.getElementById('vr-button');
+        if (vrButtonElement) {
+            var newButton = vrButtonElement.cloneNode(true);
+            vrButtonElement.parentNode.replaceChild(newButton, vrButtonElement);
+            vrButtonElement = newButton;
+            vrButtonElement.addEventListener('click', toggleVR);
         }
-    });
 
+        buildVRInfoPanel();
+        checkVRSupport();
+        // Build UI but keep hidden until VR starts
+        buildVRUI();
+        hideVRUI();
+        console.log('[VR] UI initialized');
+    }
+
+    // --------------------------------------------------------------
+    //  EXPOSE
+    // --------------------------------------------------------------
     window.updateVRUI = updateVRUI;
     window.initVRUI = initVRUI;
     window.buildVRUI = buildVRUI;
+    window.destroyVRUI = destroyVRUI;
     window.showVRUI = showVRUI;
     window.hideVRUI = hideVRUI;
     window.doExitVR = doExitVR;
@@ -523,5 +611,14 @@
     window.getVRButton = getVRButton;
     window.checkVRSupport = checkVRSupport;
     window.updateVRButtonState = updateVRButtonState;
+    window.ensureVRUIReady = ensureVRUIReady;
 
+    // Handle unhandled rejection for reference space errors
+    window.addEventListener('unhandledrejection', function (event) {
+        var reason = event.reason && event.reason.message ? event.reason.message : '';
+        if (reason.indexOf('reference space') !== -1 && window.tourState.isXRActive) {
+            console.error('[VR] Reference space error, exiting VR:', reason);
+            doExitVR();
+        }
+    });
 })();

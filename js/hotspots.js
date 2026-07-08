@@ -1,9 +1,8 @@
+// =============================================================================
+//  hotspots.js  —  Fixed: VR selection uses same raycaster as lasers
+// =============================================================================
 (function () {
     'use strict';
-
-    // =========================================================================
-    // FLOOR NAVIGATION HOTSPOT
-    // =========================================================================
 
     var infoLayer;
     var infoElements = [];
@@ -28,14 +27,14 @@
     var PULSE_CIRCLE_RADIUS = 0.25;
     var pulseCircleTexture = null;
 
-    // ==============================================================
-    //  VR STATE - Arrow controlled by joystick ONLY
-    // ==============================================================
     var vrArrowPosition = new THREE.Vector3(0, GROUND_Y, 0);
     var vrArrowHotspot = null;
     var vrArrowAngle = 0;
     var vrArrowVisible = false;
 
+    // --------------------------------------------------------------
+    //  HELPERS
+    // --------------------------------------------------------------
     function currentHotspots() {
         return window.TOUR_CONFIG.scenes[window.tourState.currentScene].hotspots;
     }
@@ -307,6 +306,9 @@
         allGroundHotspotMeshes.push(hotspotMesh, arrowMesh);
     }
 
+    // --------------------------------------------------------------
+    //  INIT HOTSPOTS
+    // --------------------------------------------------------------
     function initHotspots() {
         infoLayer = document.getElementById('info-hotspot-layer');
         infoLayer.innerHTML = '';
@@ -377,7 +379,6 @@
             }
         }
 
-        // Exposer les groupes pour le décalage vertical en VR
         window.tourState.hotspotGroup = hotspotGroup;
         window.tourState.groundHotspotGroup = groundHotspotGroup;
 
@@ -404,6 +405,9 @@
         }
     }
 
+    // --------------------------------------------------------------
+    //  SEQUENTIAL NAVIGATION
+    // --------------------------------------------------------------
     function getSequentialSceneIds() {
         var ids = Object.keys(window.TOUR_CONFIG.scenes);
         ids.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
@@ -435,9 +439,9 @@
         return ((degrees + 540) % 360) - 180;
     }
 
-    // ==============================================================
-    //  VR: Move arrow with joystick ONLY
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  VR: JOYSTICK ARROW
+    // --------------------------------------------------------------
     function moveGroundArrowWithJoystick(x, y) {
         if (!groundHotspotEntry) return;
         if (!window.tourState.isXRActive) return;
@@ -514,13 +518,12 @@
         return groundHotspotEntry.hotspot;
     }
 
-    // ==============================================================
-    //  UPDATE HOTSPOTS - VR uses joystick, 2D uses mouse
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  UPDATE HOTSPOTS
+    // --------------------------------------------------------------
     function updateHotspots() {
         if (!window.tourState.camera) return;
 
-        // VR MODE: Arrow follows joystick
         if (window.tourState.isXRActive) {
             if (groundHotspotEntry) {
                 if (!vrArrowVisible) {
@@ -528,13 +531,10 @@
                     updateVRArrow();
                 }
             }
-        }
-        // 2D MODE: Arrow follows mouse
-        else {
+        } else {
             updateMouseArrow();
         }
 
-        // Update info hotspots (works in both modes)
         infoElements.forEach(function (entry) {
             var vec = entry.hotspot.positionVector.clone();
             vec.project(window.tourState.camera);
@@ -615,6 +615,9 @@
         groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
     }
 
+    // --------------------------------------------------------------
+    //  CLICK HANDLERS
+    // --------------------------------------------------------------
     function infoHitFromScreen(event) {
         var target = event.target;
         while (target && target !== document.body) {
@@ -674,9 +677,9 @@
         return null;
     }
 
-    // ==============================================================
-    //  VR: Sequential Previous / Next navigation (used by the HUD panels)
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  VR: SEQUENTIAL NAVIGATION (for HUD buttons)
+    // --------------------------------------------------------------
     function goToSequentialScene(direction) {
         if (window.tourState.isTransitioning) return;
 
@@ -694,27 +697,22 @@
         }
     }
 
-    // ==============================================================
-    //  VR: Handle trigger select
-    // ==============================================================
-    //  Priority order for a single trigger pull:
-    //    1. 3D HUD panels (Previous / Next / Exit VR) — built in vr-ui.js
-    //    2. The VR info panel's close button, if one is open
-    //    3. A direct laser hit on a floor navigation hotspot (point at the
-    //       ring/arrow on the ground and pull the trigger)
-    //    4. Fallback: whatever hotspot the joystick-driven ground arrow has
-    //       currently selected, for players who prefer thumbstick navigation
-    // ==============================================================
+    // --------------------------------------------------------------
+    //  VR: HANDLE TRIGGER SELECT — FIXED: uses raycaster from controller
+    // --------------------------------------------------------------
     function handleXRSelect(controller) {
-        if (!controller) return;
+        if (!controller) {
+            console.warn('[XR] handleXRSelect: no controller');
+            return;
+        }
 
+        // Get raycaster from the controller (same as lasers use)
         var raycaster = window.xrRaycasterFromController
             ? window.xrRaycasterFromController(controller)
             : null;
 
         if (!raycaster) {
-            // Extremely defensive fallback if xr-laser.js failed to load —
-            // still allow joystick-based selection to work.
+            console.warn('[XR] No raycaster available, using fallback');
             var fallbackHotspot = getVRHotspot();
             if (fallbackHotspot && window.triggerGSVTransition) {
                 window.triggerGSVTransition(fallbackHotspot.target, bearingForHotspot(fallbackHotspot), { hotspot: fallbackHotspot });
@@ -722,53 +720,64 @@
             return;
         }
 
-        // 1. HUD panels
-        if (window.vrHudPanels && window.vrHudPanels.length) {
-            var hudHits = raycaster.intersectObjects(window.vrHudPanels, false);
+        // --- 1. Check HUD panels ---
+        var hudPanels = window.vrHudPanels;
+        if (hudPanels && hudPanels.length) {
+            var hudHits = raycaster.intersectObjects(hudPanels, false);
             if (hudHits.length > 0) {
-                var action = hudHits[0].object.userData.action;
+                var hitObj = hudHits[0].object;
+                var action = hitObj.userData ? hitObj.userData.action : null;
+                console.log('[XR] HUD hit: ' + action);
+
                 if (action === 'exitVR' && window.doExitVR) {
                     window.doExitVR();
+                    return;
                 } else if (action === 'next') {
                     goToSequentialScene(1);
+                    return;
                 } else if (action === 'previous') {
                     goToSequentialScene(-1);
+                    return;
                 }
-                return;
             }
         }
 
-        // 2. Info panel close button
+        // --- 2. Check ground hotspots (direct laser hit) ---
+        var groundMeshes = window.getGroundHotspotMeshes ? window.getGroundHotspotMeshes() : [];
+        if (groundMeshes.length) {
+            var groundHits = raycaster.intersectObjects(groundMeshes, false);
+            if (groundHits.length > 0) {
+                var directHotspot = groundHits[0].object.userData.hotspot;
+                if (directHotspot && window.triggerGSVTransition) {
+                    console.log('[XR] Direct ground hit: ' + directHotspot.target);
+                    window.triggerGSVTransition(directHotspot.target, bearingForHotspot(directHotspot), { hotspot: directHotspot });
+                    return;
+                }
+            }
+        }
+
+        // --- 3. Check VR info panel close ---
         if (window.checkVRInfoPanelClose && window.checkVRInfoPanelClose(raycaster)) {
             return;
         }
 
-        // 3. Direct laser hit on a floor hotspot
-        if (allGroundHotspotMeshes.length) {
-            var groundHits = raycaster.intersectObjects(allGroundHotspotMeshes, false);
-            if (groundHits.length > 0 && groundHits[0].object.userData.hotspot) {
-                var directHotspot = groundHits[0].object.userData.hotspot;
-                if (window.triggerGSVTransition) {
-                    window.triggerGSVTransition(directHotspot.target, bearingForHotspot(directHotspot), { hotspot: directHotspot });
-                }
-                return;
-            }
-        }
-
-        // 4. Fallback: joystick-selected hotspot
+        // --- 4. Fallback: joystick-selected hotspot ---
         var hotspot = getVRHotspot();
         if (hotspot && window.triggerGSVTransition) {
+            console.log('[XR] Fallback to joystick hotspot: ' + hotspot.target);
             window.triggerGSVTransition(
                 hotspot.target,
                 bearingForHotspot(hotspot),
                 { hotspot: hotspot }
             );
+        } else {
+            console.log('[XR] No interactable target hit');
         }
     }
 
-    // ==============================================================
+    // --------------------------------------------------------------
     //  EXPOSE
-    // ==============================================================
+    // --------------------------------------------------------------
     window.initHotspots = initHotspots;
     window.updateHotspots = updateHotspots;
     window.onValidClick = onValidClick;
