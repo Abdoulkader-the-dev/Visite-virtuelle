@@ -4,11 +4,6 @@
     var textureLoader;
     var MAX_CACHED_TEXTURES = 5;
     var textureCache = new Map();
-    var xrBaseReferenceSpace = null;
-    var IDENTITY_QUAT = { x: 0, y: 0, z: 0, w: 1 };
-
-    // Hauteur des yeux en VR (mètres)
-    var VR_EYE_HEIGHT = 1.6;
 
     function isTextureInUse(texture) {
         var ts = window.tourState;
@@ -34,19 +29,6 @@
             texture.dispose();
             textureCache.delete(key);
         }
-    }
-
-    function applyXRPositionalOffset(frame) {
-        var renderer = window.tourState.renderer;
-        if (!xrBaseReferenceSpace) return;
-
-        var viewerPose = frame.getViewerPose(xrBaseReferenceSpace);
-        if (!viewerPose) return;
-
-        var pos = viewerPose.transform.position;
-        var offsetTransform = new XRRigidTransform(pos, IDENTITY_QUAT);
-        var offsetReferenceSpace = xrBaseReferenceSpace.getOffsetReferenceSpace(offsetTransform);
-        renderer.xr.setReferenceSpace(offsetReferenceSpace);
     }
 
     // ==============================================================
@@ -380,10 +362,14 @@
         }
 
         if (frame && window.tourState.isXRActive) {
-            applyXRPositionalOffset(frame);
             // Polling des joysticks à chaque frame
             if (window.pollXRGamepads) {
                 window.pollXRGamepads();
+            }
+            // Met à jour les lasers des contrôleurs + le viseur (reticle) sur la
+            // cible pointée (panneaux HUD, hotspots au sol, panneau d'info)
+            if (window.updateXRLasers) {
+                window.updateXRLasers();
             }
         }
 
@@ -423,28 +409,31 @@
         window.tourState.isXRActive = true;
         console.log('[XR] Session started');
 
-        // Décalage vertical de la sphère et des hotspots pour aligner le sol virtuel
-        // avec le sol physique (hauteur des yeux ~1.6m)
-        var offset = VR_EYE_HEIGHT;
-        var sphere = window.tourState.sphere;
-        var sphere2 = window.tourState.sphere2;
-        if (sphere) sphere.position.y = offset;
-        if (sphere2) sphere2.position.y = offset;
+        // IMPORTANT: the sphere must stay exactly coincident with the camera's
+        // XR origin. These are equirectangular photos — the viewer has to sit at
+        // the mathematical center of the sphere or the image warps (this was the
+        // cause of the "insect view" / scale-distortion bug). We do NOT shift the
+        // sphere or hotspot groups vertically (see init() for details on why the
+        // default 'local' reference space already puts the camera at (0,0,0)).
 
-        // Décaler les groupes de hotspots s'ils existent
-        if (window.tourState.hotspotGroup) {
-            window.tourState.hotspotGroup.position.y = offset;
-        }
-        if (window.tourState.groundHotspotGroup) {
-            window.tourState.groundHotspotGroup.position.y = offset;
-        }
+        // Hide the 2D HTML overlay: body.xr-active drives the CSS rules in
+        // style.css that hide #nav-menu, #minimap, #compass, #info-card, etc.
+        // (previously this class was never toggled, so the DOM stayed on top of
+        // the WebXR canvas and ate all input — bug #3 from the report).
+        document.body.classList.add('xr-active');
 
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
+        if (window.showVRUI) {
+            window.showVRUI();
+        }
         // Setup controllers after session starts
         setTimeout(function () {
             setupXRControllers();
+            if (window.setupXRLasers) {
+                window.setupXRLasers(window.tourState.xrControllers);
+            }
         }, 100);
     }
 
@@ -452,18 +441,11 @@
         window.tourState.isXRActive = false;
         console.log('[XR] Session ended');
 
-        // Restaurer la position verticale de la sphère et des hotspots
-        var sphere = window.tourState.sphere;
-        var sphere2 = window.tourState.sphere2;
-        if (sphere) sphere.position.y = 0;
-        if (sphere2) sphere2.position.y = 0;
-        if (window.tourState.hotspotGroup) {
-            window.tourState.hotspotGroup.position.y = 0;
-        }
-        if (window.tourState.groundHotspotGroup) {
-            window.tourState.groundHotspotGroup.position.y = 0;
-        }
+        document.body.classList.remove('xr-active');
 
+        if (window.clearXRLasers) {
+            window.clearXRLasers();
+        }
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
@@ -491,6 +473,15 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio || 1);
         renderer.xr.enabled = true;
+        // Three.js defaults renderer.xr to the 'local' reference space, whose
+        // Y=0 plane is defined at the headset's height when the session starts
+        // — i.e. camera position starts at (0,0,0), exactly coincident with the
+        // sphere's center. We deliberately do NOT shift the sphere afterwards
+        // (see onXRSessionStart/onXRSessionEnd) and do NOT hand-place the
+        // camera at a hardcoded 1.6m — for an equirectangular photo sphere the
+        // camera must stay at the sphere's mathematical center or the image
+        // warps. That mismatch (sphere shifted +1.6m, camera left near 0) was
+        // the actual cause of the "insect view" scale-distortion bug.
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
@@ -552,7 +543,6 @@
     window.setupXRControllers = setupXRControllers;
     window.onXRSessionStart = onXRSessionStart;
     window.onXRSessionEnd = onXRSessionEnd;
-    window.VR_EYE_HEIGHT = VR_EYE_HEIGHT;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

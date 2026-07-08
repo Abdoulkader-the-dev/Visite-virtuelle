@@ -17,9 +17,10 @@
         };
     }
 
-    var VR_EYE_HEIGHT = 1.6; // hauteur des yeux en mètres
     var vrUiGroup = null;
     var exitButton = null;
+    var prevButton = null;
+    var nextButton = null;
     var vrInfoPanel = null;
     var vrInfoCanvas = null;
     var vrInfoTexture = null;
@@ -29,12 +30,6 @@
     var isVRSupported = false;
     var vrButtonElement = null;
     var isEnteringVR = false;
-
-    // ==============================================================
-    //  VR UI Positioning - Fixed!
-    // ==============================================================
-    var UI_DISTANCE = 2.0;      // How far in front of the user
-    var UI_HEIGHT_OFFSET = -0.4; // Slightly below eye level
 
     function checkVRSupport() {
         if (!navigator.xr) {
@@ -88,63 +83,85 @@
     // ==============================================================
     //  Build VR UI - Exit button properly positioned
     // ==============================================================
+    function makeHudPanelTexture(label, accent) {
+        var canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 96;
+        var ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = 'rgba(30, 30, 30, 0.82)';
+        ctx.beginPath();
+        ctx.roundRect(8, 8, 240, 80, 16);
+        ctx.fill();
+
+        ctx.strokeStyle = accent || 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(8, 8, 240, 80, 16);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 30px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, 128, 52);
+
+        var texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        return texture;
+    }
+
+    function makeHudPanel(label, accent, action, width, height) {
+        var material = new THREE.MeshBasicMaterial({
+            map: makeHudPanelTexture(label, accent),
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            depthTest: false,
+            opacity: 1
+        });
+        var mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+        mesh.userData = { action: action, isVRButton: true };
+        mesh.renderOrder = 10;
+        return mesh;
+    }
+
+    // ==============================================================
+    //  Build VR UI — 3D HUD with Previous / Next / Exit VR panels
+    // ==============================================================
+    //  These replace the 2D HTML controls while in VR (the HTML overlay is
+    //  hidden via body.xr-active in style.css). The whole group is
+    //  repositioned every frame in updateVRUI() to stay ~2m in front of the
+    //  user at eye level, and the controller lasers (xr-laser.js) raycast
+    //  against window.vrHudPanels to know what's being pointed at.
+    // ==============================================================
     function buildVRUI() {
         if (vrUiGroup) { return; }
 
         vrUiGroup = new THREE.Group();
         vrUiGroup.name = 'vr-ui-hud';
 
-        // Exit button canvas
-        var canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 64;
-        var ctx = canvas.getContext('2d');
+        prevButton = makeHudPanel('◀ Précédent', 'rgba(59, 130, 246, 0.6)', 'previous', 0.5, 0.19);
+        prevButton.position.set(-0.62, 0, -1.8);
+        vrUiGroup.add(prevButton);
 
-        // Background with rounded corners
-        ctx.fillStyle = 'rgba(30, 30, 30, 0.8)';
-        ctx.beginPath();
-        ctx.roundRect(8, 8, 240, 48, 12);
-        ctx.fill();
+        nextButton = makeHudPanel('Suivant ▶', 'rgba(59, 130, 246, 0.6)', 'next', 0.5, 0.19);
+        nextButton.position.set(0.62, 0, -1.8);
+        vrUiGroup.add(nextButton);
 
-        // Border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(8, 8, 240, 48, 12);
-        ctx.stroke();
-
-        // Text
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('✕ Quitter VR', 128, 32);
-
-        var texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-
-        var material = new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-            opacity: 1
-        });
-
-        exitButton = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.12), material);
-        exitButton.position.set(0, 0, -1.8); // position relative au groupe, qui sera placé à hauteur des yeux
-        exitButton.userData = { action: 'exitVR', isVRButton: true };
-        exitButton.renderOrder = 10;
+        exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', 0.5, 0.19);
+        exitButton.position.set(0, -0.32, -1.8);
         vrUiGroup.add(exitButton);
 
-        // Store reference for hotspot.js
+        // Store references for hotspots.js / xr-laser.js
         window.vrExitButton = exitButton;
+        window.vrHudPanels = [prevButton, nextButton, exitButton];
 
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrUiGroup);
         }
 
-        console.log('[VR] UI built');
+        console.log('[VR] 3D HUD built (Previous / Next / Exit VR)');
     }
 
     function showVRUI() {
@@ -250,11 +267,13 @@
                 return;
             }
 
-            // On ne force plus le reference space 'local-floor' car on gère manuellement
-            // la hauteur via le décalage de la sphère et des hotspots.
-            // On garde la demande de session avec les features requises par sécurité.
+            // No positional reference space is required: the renderer uses the
+            // mandatory 'viewer' reference space (rotation-only, origin pinned at
+            // the camera) so the panorama never distorts. 'local-floor' is only
+            // requested optionally, purely so Quest can report a nicer starting
+            // pose if available — the tour doesn't depend on it.
             navigator.xr.requestSession('immersive-vr', {
-                requiredFeatures: ['local-floor']
+                optionalFeatures: ['local-floor']
             }).then(function (session) {
                 session.addEventListener('end', function () {
                     console.log('[VR] Session ended via event');
@@ -291,7 +310,14 @@
     }
 
     // ==============================================================
-    //  Update VR UI - Follows the user's view with fixed height
+    //  Update VR UI - Follows the user's actual head position/gaze
+    // ==============================================================
+    //  The HUD is re-anchored to the camera's *real* current position each
+    //  frame (not a hardcoded eye-height constant) — the camera already sits
+    //  at whatever height the 'local' XR reference space reports, which is
+    //  coincident with the panorama sphere's center. Anchoring to a fixed
+    //  world Y would drift out of reach if the sphere/camera pairing ever
+    //  moves, so we always read camera.position directly.
     // ==============================================================
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -302,21 +328,17 @@
         var camera = window.tourState.camera;
         if (!camera) return;
 
-        // Positionner l'UI à hauteur des yeux (VR_EYE_HEIGHT) et à une distance fixe
-        // devant la caméra, dans la direction du regard.
         var forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         forward.y = 0;
         forward.normalize();
 
-        // Position absolue : à hauteur VR_EYE_HEIGHT, dans la direction forward à 1.8m
-        var position = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
+        var position = camera.position.clone();
         position.add(forward.clone().multiplyScalar(1.8));
 
         vrUiGroup.position.copy(position);
         // Orienter le groupe vers la caméra (pour que le texte soit lisible)
-        var target = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
-        vrUiGroup.lookAt(target);
+        vrUiGroup.lookAt(camera.position);
         vrUiGroup.rotateY(Math.PI); // retourner pour faire face à la caméra
 
         vrUiGroup.visible = true;
@@ -351,6 +373,18 @@
         if (window.tourState && window.tourState.scene) {
             window.tourState.scene.add(vrInfoMesh);
         }
+
+        // NOTE: `vrInfoPanel` itself was previously never assigned here — every
+        // function below (showVRInfoPanel, checkVRInfoPanelClose, ...) reads the
+        // *local* vrInfoPanel variable, not the individual vrInfoCanvas/Mesh/etc
+        // fields, so it stayed null forever and info-hotspot clicks in VR threw.
+        vrInfoPanel = {
+            mesh: vrInfoMesh,
+            canvas: vrInfoCanvas,
+            texture: vrInfoTexture,
+            material: vrInfoMaterial
+        };
+        window.vrInfoPanel = vrInfoPanel;
     }
 
     function showVRInfoPanel(hotspot) {
@@ -448,12 +482,11 @@
         forward.y = 0;
         forward.normalize();
 
-        var panelPosition = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
+        var panelPosition = camera.position.clone();
         panelPosition.add(forward.clone().multiplyScalar(2.5));
 
         vrInfoPanel.mesh.position.copy(panelPosition);
-        var target = new THREE.Vector3(0, VR_EYE_HEIGHT, 0);
-        vrInfoPanel.mesh.lookAt(target);
+        vrInfoPanel.mesh.lookAt(camera.position);
         vrInfoPanel.mesh.rotateY(Math.PI);
     }
 
@@ -526,11 +559,4 @@
     window.checkVRSupport = checkVRSupport;
     window.updateVRButtonState = updateVRButtonState;
 
-    // Store panel reference for hotspots.js
-    window.vrInfoPanel = {
-        mesh: vrInfoMesh,
-        canvas: vrInfoCanvas,
-        texture: vrInfoTexture,
-        material: vrInfoMaterial
-    };
 })();
