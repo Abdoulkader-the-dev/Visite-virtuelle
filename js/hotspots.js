@@ -1,6 +1,3 @@
-// =============================================================================
-//  hotspots.js  —  Fixed: VR selection uses same raycaster as lasers
-// =============================================================================
 (function () {
     'use strict';
 
@@ -406,7 +403,7 @@
     }
 
     // --------------------------------------------------------------
-    //  SEQUENTIAL NAVIGATION
+    //  SEQUENTIAL NAVIGATION (no longer used for buttons, but kept for joystick fallback)
     // --------------------------------------------------------------
     function getSequentialSceneIds() {
         var ids = Object.keys(window.TOUR_CONFIG.scenes);
@@ -616,7 +613,7 @@
     }
 
     // --------------------------------------------------------------
-    //  CLICK HANDLERS
+    //  CLICK HANDLERS (2D)
     // --------------------------------------------------------------
     function infoHitFromScreen(event) {
         var target = event.target;
@@ -678,27 +675,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: SEQUENTIAL NAVIGATION (for HUD buttons)
-    // --------------------------------------------------------------
-    function goToSequentialScene(direction) {
-        if (window.tourState.isTransitioning) return;
-
-        var ids = getSequentialSceneIds();
-        var currentIndex = ids.indexOf(window.tourState.currentScene);
-        if (currentIndex === -1) return;
-
-        var nextIndex = (currentIndex + direction + ids.length) % ids.length;
-        var targetId = ids[nextIndex];
-
-        if (window.startTransition) {
-            window.startTransition(targetId);
-        } else if (window.loadScene) {
-            window.loadScene(targetId);
-        }
-    }
-
-    // --------------------------------------------------------------
-    //  VR: HANDLE TRIGGER SELECT — FIXED: uses raycaster from controller
+    //  VR: HANDLE TRIGGER SELECT — ground first, then exit button, then fallback
     // --------------------------------------------------------------
     function handleXRSelect(controller) {
         if (!controller) {
@@ -706,7 +683,6 @@
             return;
         }
 
-        // Get raycaster from the controller (same as lasers use)
         var raycaster = window.xrRaycasterFromController
             ? window.xrRaycasterFromController(controller)
             : null;
@@ -720,48 +696,39 @@
             return;
         }
 
-        // --- 1. Check HUD panels ---
-        var hudPanels = window.vrHudPanels;
-        if (hudPanels && hudPanels.length) {
-            var hudHits = raycaster.intersectObjects(hudPanels, false);
-            if (hudHits.length > 0) {
-                var hitObj = hudHits[0].object;
-                var action = hitObj.userData ? hitObj.userData.action : null;
-                console.log('[XR] HUD hit: ' + action);
-
-                if (action === 'exitVR' && window.doExitVR) {
-                    window.doExitVR();
-                    return;
-                } else if (action === 'next') {
-                    goToSequentialScene(1);
-                    return;
-                } else if (action === 'previous') {
-                    goToSequentialScene(-1);
-                    return;
-                }
-            }
-        }
-
-        // --- 2. Check ground hotspots (direct laser hit) ---
+        // 1. Check ground hotspots FIRST
         var groundMeshes = window.getGroundHotspotMeshes ? window.getGroundHotspotMeshes() : [];
         if (groundMeshes.length) {
             var groundHits = raycaster.intersectObjects(groundMeshes, false);
             if (groundHits.length > 0) {
                 var directHotspot = groundHits[0].object.userData.hotspot;
                 if (directHotspot && window.triggerGSVTransition) {
-                    console.log('[XR] Direct ground hit: ' + directHotspot.target);
+                    console.log('[XR] Ground hit: ' + directHotspot.target);
                     window.triggerGSVTransition(directHotspot.target, bearingForHotspot(directHotspot), { hotspot: directHotspot });
                     return;
                 }
             }
         }
 
-        // --- 3. Check VR info panel close ---
+        // 2. Check exit button
+        var exitBtn = window.vrExitButton;
+        if (exitBtn) {
+            var exitHits = raycaster.intersectObject(exitBtn);
+            if (exitHits.length > 0) {
+                console.log('[XR] Exit button hit');
+                if (window.doExitVR) {
+                    window.doExitVR();
+                }
+                return;
+            }
+        }
+
+        // 3. Check VR info panel close
         if (window.checkVRInfoPanelClose && window.checkVRInfoPanelClose(raycaster)) {
             return;
         }
 
-        // --- 4. Fallback: joystick-selected hotspot ---
+        // 4. Fallback: joystick-selected hotspot
         var hotspot = getVRHotspot();
         if (hotspot && window.triggerGSVTransition) {
             console.log('[XR] Fallback to joystick hotspot: ' + hotspot.target);
@@ -784,7 +751,7 @@
     window.onDoubleClick = onDoubleClick;
     window.rebuildHotspots = initHotspots;
     window.handleXRSelect = handleXRSelect;
-    window.goToSequentialScene = goToSequentialScene;
+    window.goToSequentialScene = getSequentialSceneIds; // not used, but keep
     window.moveGroundArrowWithJoystick = moveGroundArrowWithJoystick;
     window.getVRHotspot = getVRHotspot;
     window.getGroundHotspotMeshes = function () { return allGroundHotspotMeshes; };

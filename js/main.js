@@ -1,6 +1,3 @@
-// =============================================================================
-//  main.js  —  Fixed: ensure controllers are reset on each VR session
-// =============================================================================
 (function () {
     'use strict';
 
@@ -345,39 +342,30 @@
     }
 
     // --------------------------------------------------------------
-    //  XR SESSION MANAGEMENT — FIXED: clean reset on each entry
+    //  XR SESSION MANAGEMENT
     // --------------------------------------------------------------
     function onXRSessionStart() {
         console.log('[XR] Session start event');
 
-        // Reset XR state
         window.tourState.isXRActive = true;
-
-        // Hide 2D UI
         document.body.classList.add('xr-active');
 
-        // Update VR button
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
 
-        // Show VR UI — this will rebuild if needed
         if (window.showVRUI) {
             window.showVRUI();
         }
 
-        // IMPORTANT: Clear any stale controllers first
         if (window.clearXRControllers) {
             window.clearXRControllers();
         }
 
-        // Then set up fresh controllers after a short delay
-        // This gives the session time to fully initialize
         setTimeout(function () {
             if (window.setupXRControllers) {
                 window.setupXRControllers();
             }
-            // Ensure UI panels are registered for raycasting
             if (window.ensureVRUIReady) {
                 window.ensureVRUIReady();
             }
@@ -388,10 +376,8 @@
     function onXRSessionEnd() {
         console.log('[XR] Session end event');
 
-        // Clear XR state
         window.tourState.isXRActive = false;
 
-        // Hide VR UI
         if (window.hideVRUI) {
             window.hideVRUI();
         }
@@ -399,25 +385,20 @@
             window.hideVRInfoPanel();
         }
 
-        // CRITICAL: Clean up controllers and lasers
         if (window.clearXRControllers) {
             window.clearXRControllers();
         }
 
-        // Destroy VR UI so it's rebuilt fresh on next entry
         if (window.destroyVRUI) {
             window.destroyVRUI();
         }
 
-        // Restore 2D UI
         document.body.classList.remove('xr-active');
 
-        // Update VR button
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
 
-        // Reset camera for 2D mode
         window.tourState.camera.position.set(0, 0, 0.001);
         window.tourState.camera.quaternion.identity();
 
@@ -445,7 +426,6 @@
         renderer.toneMapping = THREE.LinearToneMapping;
         renderer.toneMappingExposure = 1.4;
 
-        // XR session events
         renderer.xr.addEventListener('sessionstart', onXRSessionStart);
         renderer.xr.addEventListener('sessionend', onXRSessionEnd);
 

@@ -1,6 +1,3 @@
-// =============================================================================
-//  xr-controls.js  —  Fixed: full reset on each session, fresh controllers
-// =============================================================================
 (function () {
     'use strict';
 
@@ -79,18 +76,14 @@
             window.clearXRLasers();
         }
 
-        // 3. CLEAR THREE.JS CONTROLLER CACHE — this is the key fix for re-entry
+        // 3. CLEAR THREE.JS CONTROLLER CACHE — key for re-entry
         var renderer = window.tourState.renderer;
         if (renderer && renderer.xr && renderer.xr.controllers) {
-            // In Three.js r128, renderer.xr.controllers is the cache array.
-            // Clearing it forces getController() to create fresh objects.
             renderer.xr.controllers = [];
             console.log('[XR] Three.js controller cache cleared');
         }
 
-        // 4. Reset the setup attempts counter
         controllerSetupAttempts = 0;
-
         console.log('[XR] Controllers cleared completely');
     }
 
@@ -100,7 +93,6 @@
     function setupXRControllers() {
         console.log('[XR] Setting up controllers (attempt ' + (controllerSetupAttempts + 1) + ')');
 
-        // Start fresh
         clearXRControllers();
 
         var renderer = window.tourState.renderer;
@@ -119,15 +111,14 @@
                 continue;
             }
 
-            // Ensure the controller is clean
             controller.userData = { index: i, active: true };
 
-            // --- Add to scene ---
             window.tourState.scene.add(controller);
 
-            // --- SELECT (trigger) ---
+            // Remove any previous listeners by cloning? Better to use fresh controller.
+            // We'll attach new listeners.
+
             controller.addEventListener('selectstart', function onSelectStart(event) {
-                // Guard against stale events
                 if (!window.tourState.isXRActive) {
                     console.warn('[XR] Select event ignored (not in VR)');
                     return;
@@ -138,7 +129,6 @@
                 }
             });
 
-            // --- SQUEEZE (grip) ---
             controller.addEventListener('squeezestart', function onSqueezeStart() {
                 if (!window.tourState.isXRActive) return;
                 console.log('[XR] Grip pressed');
@@ -147,7 +137,6 @@
                 }
             });
 
-            // --- BUTTON A/X (menu) ---
             controller.addEventListener('buttondown', function onButtonDown(event) {
                 if (!window.tourState.isXRActive) return;
                 if (event.button === 2) {
@@ -166,12 +155,10 @@
         window.tourState.xrControllers = controllers;
         console.log('[XR] ' + controllers.length + ' controller(s) ready');
 
-        // --- Setup lasers after controllers exist ---
         if (window.setupXRLasers) {
             window.setupXRLasers(controllers);
         }
 
-        // --- Ensure VR UI panels are registered ---
         if (window.ensureVRUIReady) {
             window.ensureVRUIReady();
         }
@@ -184,11 +171,9 @@
     // --------------------------------------------------------------
     function ensureControllersReady() {
         if (window.tourState.isXRActive) {
-            // If we already have controllers but they might be stale, force a reset
             if (window.tourState.xrControllers && window.tourState.xrControllers.length > 0) {
                 console.log('[XR] Re-initializing controllers (fresh session)');
                 clearXRControllers();
-                // Small delay to let the session settle
                 setTimeout(function () {
                     setupXRControllers();
                 }, 50);
