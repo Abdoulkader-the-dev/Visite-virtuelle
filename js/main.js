@@ -2,7 +2,7 @@
     'use strict';
 
     var textureLoader;
-    var MAX_CACHED_TEXTURES = 50; // large enough to hold all scene textures
+    var MAX_CACHED_TEXTURES = 50;
     var textureCache = new Map();
 
     function isTextureInUse(texture) {
@@ -114,17 +114,12 @@
         });
     }
 
-    // ======================================================================
-    //  PRELOAD ALL SCENES – no budget, no idle callback
-    // ======================================================================
     function preloadAllScenes() {
         var allSceneIds = Object.keys(window.TOUR_CONFIG.scenes);
-        // Start loading every scene image immediately (except current, which is already loaded)
         allSceneIds.forEach(function (sceneId) {
             var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
             if (sceneConfig && sceneConfig.image) {
                 loadTexture(sceneConfig.image).catch(function (err) {
-                    // Silent fail – image might be missing, but we don't block
                     console.warn('[Preload] Could not load ' + sceneConfig.image, err);
                 });
             }
@@ -315,7 +310,7 @@
     }
 
     // --------------------------------------------------------------
-    //  XR SESSION MANAGEMENT – FIX: no delay
+    //  XR SESSION MANAGEMENT
     // --------------------------------------------------------------
     function onXRSessionStart() {
         console.log('[XR] Session start event');
@@ -331,12 +326,10 @@
             window.showVRUI();
         }
 
-        // Ensure controllers are cleared before setup
         if (window.clearXRControllers) {
             window.clearXRControllers();
         }
 
-        // ===== FIX 3: Remove setTimeout – call immediately =====
         if (window.setupXRControllers) {
             window.setupXRControllers();
         }
@@ -370,6 +363,14 @@
 
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
+        }
+
+        // --- CRITICAL FIX: Reset renderer XR session to allow re-entry ---
+        var renderer = window.tourState.renderer;
+        if (renderer && renderer.xr) {
+            // Clear the session reference so a new session can be started
+            renderer.xr.setSession(null);
+            console.log('[XR] Renderer session cleared');
         }
 
         window.tourState.camera.position.set(0, 0, 0.001);

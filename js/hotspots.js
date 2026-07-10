@@ -1,3 +1,6 @@
+// =============================================================================
+//  hotspots.js  —  Pulse circles are now interactable
+// =============================================================================
 (function () {
     'use strict';
 
@@ -104,6 +107,7 @@
         disposeObject3D(groundHotspotGroup);
         groundHotspotGroup = new THREE.Group();
         groundHotspotEntry = null;
+        // Do NOT clear allGroundHotspotMeshes here – it will be rebuilt in initHotspots
         allGroundHotspotMeshes = [];
         clearPulseCircles();
     }
@@ -152,6 +156,11 @@
                 entry.mesh.geometry.dispose();
                 if (entry.mesh.material) {
                     entry.mesh.material.dispose();
+                }
+                // Remove from allGroundHotspotMeshes if present
+                var index = allGroundHotspotMeshes.indexOf(entry.mesh);
+                if (index !== -1) {
+                    allGroundHotspotMeshes.splice(index, 1);
                 }
             }
         });
@@ -209,6 +218,9 @@
             mesh.userData.hotspot = hotspot;
 
             window.tourState.scene.add(mesh);
+
+            // --- ADD PULSE MESH TO RAYCAST TARGETS ---
+            allGroundHotspotMeshes.push(mesh);
 
             var delay = index * 0.15;
 
@@ -291,6 +303,7 @@
             arrow: arrowMesh,
             opacity: 0
         };
+        // Add ring and arrow to raycast targets
         allGroundHotspotMeshes.push(hotspotMesh, arrowMesh);
     }
 
@@ -303,6 +316,9 @@
         infoElements = [];
 
         clearGroundHotspots();
+
+        // Reset allGroundHotspotMeshes – we'll rebuild it
+        allGroundHotspotMeshes = [];
 
         if (window.tourState.scene) {
             window.tourState.scene.remove(hotspotGroup);
@@ -370,6 +386,7 @@
         window.tourState.hotspotGroup = hotspotGroup;
         window.tourState.groundHotspotGroup = groundHotspotGroup;
 
+        // Create pulse circles – they will be added to allGroundHotspotMeshes inside
         createPulseCircles();
 
         var fwdBtn = document.getElementById('dir-arrow-fwd');
@@ -433,7 +450,6 @@
     function getDominantController() {
         var controllers = window.tourState.xrControllers;
         if (!controllers || controllers.length === 0) return null;
-        // Prefer right controller (index 1) if available, else use first
         return controllers[1] || controllers[0];
     }
 
@@ -444,15 +460,12 @@
         var controller = getDominantController();
         if (!controller) return;
 
-        // Get raycaster from the controller (same as used for lasers)
         var raycaster = window.xrRaycasterFromController ? window.xrRaycasterFromController(controller) : null;
         if (!raycaster) return;
 
-        // Intersect with ground plane
         var intersectPoint = new THREE.Vector3();
         var hit = raycaster.ray.intersectPlane(groundPlane, intersectPoint);
         if (!hit) {
-            // No ground hit: hide arrow
             groundHotspotEntry.opacity = 0;
             groundHotspotEntry.ring.material.opacity = 0;
             groundHotspotEntry.arrow.material.opacity = 0;
@@ -462,7 +475,6 @@
             return;
         }
 
-        // Clamp distance to limits
         var horizontalLength = Math.sqrt(intersectPoint.x * intersectPoint.x + intersectPoint.z * intersectPoint.z);
         if (horizontalLength > MAX_FOLLOW_RADIUS) {
             var scale = MAX_FOLLOW_RADIUS / horizontalLength;
@@ -474,10 +486,8 @@
             intersectPoint.z *= scale2;
         }
 
-        // Find nearest hotspot
         var nearest = nearestTransitionHotspot(intersectPoint);
 
-        // Update arrow position
         groundHotspotEntry.ring.position.copy(intersectPoint);
         groundHotspotEntry.arrow.position.copy(intersectPoint);
         groundHotspotEntry.arrow.position.y += 0.01;
@@ -487,7 +497,6 @@
             groundHotspotEntry.ring.userData.hotspot = nearest;
             groundHotspotEntry.arrow.userData.hotspot = nearest;
 
-            // Compute angle to point toward hotspot
             var dx = nearest.positionVector.x - intersectPoint.x;
             var dz = nearest.positionVector.z - intersectPoint.z;
             var angle = Math.atan2(-dx, -dz);
@@ -499,7 +508,7 @@
             groundHotspotEntry.hotspot = null;
             groundHotspotEntry.ring.userData.hotspot = null;
             groundHotspotEntry.arrow.userData.hotspot = null;
-            groundHotspotEntry.opacity = 0.3; // show arrow even without hotspot (dim)
+            groundHotspotEntry.opacity = 0.3;
         }
 
         groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
@@ -513,14 +522,11 @@
         if (!window.tourState.camera) return;
 
         if (window.tourState.isXRActive) {
-            // VR: arrow follows laser
             updateVRArrowFromLaser();
         } else {
-            // 2D: arrow follows mouse
             updateMouseArrow();
         }
 
-        // Info hotspots (same for both)
         infoElements.forEach(function (entry) {
             var vec = entry.hotspot.positionVector.clone();
             vec.project(window.tourState.camera);
@@ -605,7 +611,7 @@
     }
 
     // --------------------------------------------------------------
-    //  CLICK HANDLERS (2D) – FIX: direct hits only
+    //  CLICK HANDLERS (2D) – direct hits only
     // --------------------------------------------------------------
     function infoHitFromScreen(event) {
         var target = event.target;
@@ -634,7 +640,6 @@
         groundRaycaster.setFromCamera(mouseNDC, window.tourState.camera);
         var intersects = groundRaycaster.intersectObjects(allGroundHotspotMeshes, false);
 
-        // Only if we hit a mesh AND that mesh has a hotspot reference
         if (intersects.length > 0 && window.tourState.mouseDelta < 5) {
             var hitHotspot = intersects[0].object.userData.hotspot;
             if (hitHotspot) {
@@ -642,7 +647,6 @@
             }
         }
 
-        // ===== FIX 2: No fallback – return null =====
         return null;
     }
 
@@ -668,7 +672,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: HANDLE TRIGGER SELECT – FIX: direct hits only
+    //  VR: HANDLE TRIGGER SELECT – direct hits only
     // --------------------------------------------------------------
     function handleXRSelect(controller) {
         if (!controller) {
@@ -685,7 +689,7 @@
             return;
         }
 
-        // 1. Check HUD panels (exit button) – keep this
+        // 1. Check HUD panels (exit button)
         if (window.vrHudPanels && window.vrHudPanels.length) {
             var hudHits = raycaster.intersectObjects(window.vrHudPanels, false);
             if (hudHits.length > 0) {
@@ -697,12 +701,12 @@
             }
         }
 
-        // 2. Check VR info panel close – keep this
+        // 2. Check VR info panel close
         if (window.checkVRInfoPanelClose && window.checkVRInfoPanelClose(raycaster)) {
             return;
         }
 
-        // 3. Check ground hotspot meshes – DIRECT HITS ONLY
+        // 3. Check ground hotspot meshes (ring, arrow, pulse circles)
         var groundMeshes = window.getGroundHotspotMeshes ? window.getGroundHotspotMeshes() : [];
         if (groundMeshes.length) {
             var groundHits = raycaster.intersectObjects(groundMeshes, false);
@@ -716,8 +720,7 @@
             }
         }
 
-        // ===== FIX 2: NO FALLBACK – we do NOT use getVRHotspot() =====
-        console.log('[XR] No interactable target hit (ground mesh not hit)');
+        console.log('[XR] No interactable target hit');
     }
 
     // --------------------------------------------------------------
@@ -729,6 +732,6 @@
     window.onDoubleClick = onDoubleClick;
     window.rebuildHotspots = initHotspots;
     window.handleXRSelect = handleXRSelect;
-    window.goToSequentialScene = getSequentialSceneIds; // not used, but keep
+    window.goToSequentialScene = getSequentialSceneIds;
     window.getGroundHotspotMeshes = function () { return allGroundHotspotMeshes; };
 })();
