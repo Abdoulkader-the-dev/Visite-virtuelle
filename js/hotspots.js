@@ -539,7 +539,7 @@
     }
 
     // --------------------------------------------------------------
-    //  2D MOUSE ARROW (unchanged)
+    //  2D MOUSE ARROW
     // --------------------------------------------------------------
     function updateMouseArrow() {
         var camera = window.tourState.camera;
@@ -605,7 +605,7 @@
     }
 
     // --------------------------------------------------------------
-    //  CLICK HANDLERS (2D)
+    //  CLICK HANDLERS (2D) – FIX: direct hits only
     // --------------------------------------------------------------
     function infoHitFromScreen(event) {
         var target = event.target;
@@ -619,6 +619,30 @@
             }
             target = target.parentNode;
         }
+        return null;
+    }
+
+    function groundHotspotFromEvent(event) {
+        if (!event || !window.tourState.camera || window.tourState.isTransitioning || allGroundHotspotMeshes.length === 0) {
+            return null;
+        }
+
+        mouseNDC.set(
+            (event.clientX / window.innerWidth) * 2 - 1,
+            -(event.clientY / window.innerHeight) * 2 + 1
+        );
+        groundRaycaster.setFromCamera(mouseNDC, window.tourState.camera);
+        var intersects = groundRaycaster.intersectObjects(allGroundHotspotMeshes, false);
+
+        // Only if we hit a mesh AND that mesh has a hotspot reference
+        if (intersects.length > 0 && window.tourState.mouseDelta < 5) {
+            var hitHotspot = intersects[0].object.userData.hotspot;
+            if (hitHotspot) {
+                return hitHotspot;
+            }
+        }
+
+        // ===== FIX 2: No fallback – return null =====
         return null;
     }
 
@@ -643,31 +667,8 @@
         }
     }
 
-    function groundHotspotFromEvent(event) {
-        if (!event || !window.tourState.camera || window.tourState.isTransitioning || allGroundHotspotMeshes.length === 0) {
-            return null;
-        }
-
-        mouseNDC.set(
-            (event.clientX / window.innerWidth) * 2 - 1,
-            -(event.clientY / window.innerHeight) * 2 + 1
-        );
-        groundRaycaster.setFromCamera(mouseNDC, window.tourState.camera);
-        var intersects = groundRaycaster.intersectObjects(allGroundHotspotMeshes, false);
-
-        if (intersects.length > 0 && window.tourState.mouseDelta < 5) {
-            return intersects[0].object.userData.hotspot || null;
-        }
-
-        if (groundHotspotEntry && groundHotspotEntry.hotspot && window.tourState.mouseDelta < 5) {
-            return groundHotspotEntry.hotspot;
-        }
-
-        return null;
-    }
-
     // --------------------------------------------------------------
-    //  VR: HANDLE TRIGGER SELECT (unchanged, already uses raycaster)
+    //  VR: HANDLE TRIGGER SELECT – FIX: direct hits only
     // --------------------------------------------------------------
     function handleXRSelect(controller) {
         if (!controller) {
@@ -680,58 +681,43 @@
             : null;
 
         if (!raycaster) {
-            console.warn('[XR] No raycaster available, using fallback');
-            var fallbackHotspot = groundHotspotEntry ? groundHotspotEntry.hotspot : null;
-            if (fallbackHotspot && window.triggerGSVTransition) {
-                window.triggerGSVTransition(fallbackHotspot.target, bearingForHotspot(fallbackHotspot), { hotspot: fallbackHotspot });
-            }
+            console.warn('[XR] No raycaster available');
             return;
         }
 
-        // 1. Check ground hotspots FIRST
-        var groundMeshes = window.getGroundHotspotMeshes ? window.getGroundHotspotMeshes() : [];
-        if (groundMeshes.length) {
-            var groundHits = raycaster.intersectObjects(groundMeshes, false);
-            if (groundHits.length > 0) {
-                var directHotspot = groundHits[0].object.userData.hotspot;
-                if (directHotspot && window.triggerGSVTransition) {
-                    console.log('[XR] Ground hit: ' + directHotspot.target);
-                    window.triggerGSVTransition(directHotspot.target, bearingForHotspot(directHotspot), { hotspot: directHotspot });
-                    return;
-                }
-            }
-        }
-
-        // 2. Check exit button
-        var exitBtn = window.vrExitButton;
-        if (exitBtn) {
-            var exitHits = raycaster.intersectObject(exitBtn);
-            if (exitHits.length > 0) {
-                console.log('[XR] Exit button hit');
-                if (window.doExitVR) {
+        // 1. Check HUD panels (exit button) – keep this
+        if (window.vrHudPanels && window.vrHudPanels.length) {
+            var hudHits = raycaster.intersectObjects(window.vrHudPanels, false);
+            if (hudHits.length > 0) {
+                var action = hudHits[0].object.userData.action;
+                if (action === 'exitVR' && window.doExitVR) {
                     window.doExitVR();
                 }
                 return;
             }
         }
 
-        // 3. Check VR info panel close
+        // 2. Check VR info panel close – keep this
         if (window.checkVRInfoPanelClose && window.checkVRInfoPanelClose(raycaster)) {
             return;
         }
 
-        // 4. Fallback: joystick-selected hotspot (if any)
-        var hotspot = groundHotspotEntry ? groundHotspotEntry.hotspot : null;
-        if (hotspot && window.triggerGSVTransition) {
-            console.log('[XR] Fallback to joystick hotspot: ' + hotspot.target);
-            window.triggerGSVTransition(
-                hotspot.target,
-                bearingForHotspot(hotspot),
-                { hotspot: hotspot }
-            );
-        } else {
-            console.log('[XR] No interactable target hit');
+        // 3. Check ground hotspot meshes – DIRECT HITS ONLY
+        var groundMeshes = window.getGroundHotspotMeshes ? window.getGroundHotspotMeshes() : [];
+        if (groundMeshes.length) {
+            var groundHits = raycaster.intersectObjects(groundMeshes, false);
+            if (groundHits.length > 0) {
+                var directHotspot = groundHits[0].object.userData.hotspot;
+                if (directHotspot && window.triggerGSVTransition) {
+                    console.log('[XR] Direct ground hit: ' + directHotspot.target);
+                    window.triggerGSVTransition(directHotspot.target, bearingForHotspot(directHotspot), { hotspot: directHotspot });
+                    return;
+                }
+            }
         }
+
+        // ===== FIX 2: NO FALLBACK – we do NOT use getVRHotspot() =====
+        console.log('[XR] No interactable target hit (ground mesh not hit)');
     }
 
     // --------------------------------------------------------------

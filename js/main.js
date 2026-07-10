@@ -2,7 +2,7 @@
     'use strict';
 
     var textureLoader;
-    var MAX_CACHED_TEXTURES = 5;
+    var MAX_CACHED_TEXTURES = 50; // large enough to hold all scene textures
     var textureCache = new Map();
 
     function isTextureInUse(texture) {
@@ -114,49 +114,22 @@
         });
     }
 
+    // ======================================================================
+    //  PRELOAD ALL SCENES – no budget, no idle callback
+    // ======================================================================
     function preloadAllScenes() {
-        var allIds = Object.keys(window.TOUR_CONFIG.scenes);
-        var currentId = window.tourState.currentScene;
-        var currentConfig = window.TOUR_CONFIG.scenes[currentId];
-        var linkedIds = [];
-        var remainingIds;
-        var budget;
-
-        if (currentConfig) {
-            linkedIds = (currentConfig.hotspots || [])
-                .filter(function (hotspot) {
-                    return hotspot.type === 'transition';
-                })
-                .map(function (hotspot) {
-                    return hotspot.target;
+        var allSceneIds = Object.keys(window.TOUR_CONFIG.scenes);
+        // Start loading every scene image immediately (except current, which is already loaded)
+        allSceneIds.forEach(function (sceneId) {
+            var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
+            if (sceneConfig && sceneConfig.image) {
+                loadTexture(sceneConfig.image).catch(function (err) {
+                    // Silent fail – image might be missing, but we don't block
+                    console.warn('[Preload] Could not load ' + sceneConfig.image, err);
                 });
-        }
-
-        budget = Math.max(0, MAX_CACHED_TEXTURES - 1 - linkedIds.length);
-
-        remainingIds = allIds.filter(function (id) {
-            return id !== currentId && linkedIds.indexOf(id) === -1;
-        }).slice(0, budget);
-
-        function loadNext(ids, index) {
-            if (index >= ids.length) return;
-
-            var idle = function () {
-                loadTexture(window.TOUR_CONFIG.scenes[ids[index]].image)
-                    .catch(function () { })
-                    .then(function () {
-                        loadNext(ids, index + 1);
-                    });
-            };
-
-            if (window.requestIdleCallback) {
-                window.requestIdleCallback(idle, { timeout: 3000 });
-            } else {
-                setTimeout(idle, 200 * index);
             }
-        }
-
-        loadNext(remainingIds, 0);
+        });
+        console.log('[Preload] All scene images loading started');
     }
 
     function createSphere() {
@@ -342,7 +315,7 @@
     }
 
     // --------------------------------------------------------------
-    //  XR SESSION MANAGEMENT
+    //  XR SESSION MANAGEMENT – FIX: no delay
     // --------------------------------------------------------------
     function onXRSessionStart() {
         console.log('[XR] Session start event');
@@ -358,19 +331,19 @@
             window.showVRUI();
         }
 
+        // Ensure controllers are cleared before setup
         if (window.clearXRControllers) {
             window.clearXRControllers();
         }
 
-        setTimeout(function () {
-            if (window.setupXRControllers) {
-                window.setupXRControllers();
-            }
-            if (window.ensureVRUIReady) {
-                window.ensureVRUIReady();
-            }
-            console.log('[XR] Controller setup complete');
-        }, 150);
+        // ===== FIX 3: Remove setTimeout – call immediately =====
+        if (window.setupXRControllers) {
+            window.setupXRControllers();
+        }
+        if (window.ensureVRUIReady) {
+            window.ensureVRUIReady();
+        }
+        console.log('[XR] Controller setup complete (immediate)');
     }
 
     function onXRSessionEnd() {
