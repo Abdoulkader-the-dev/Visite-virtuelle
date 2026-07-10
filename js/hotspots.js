@@ -1,6 +1,3 @@
-// =============================================================================
-//  hotspots.js  —  Pulse circles are now interactable
-// =============================================================================
 (function () {
     'use strict';
 
@@ -24,7 +21,7 @@
     var allGroundHotspotMeshes = [];
 
     var pulseCircles = [];
-    var PULSE_CIRCLE_RADIUS = 0.25;
+    var PULSE_CIRCLE_RADIUS = 0.5; // doubled from 0.25
     var pulseCircleTexture = null;
 
     // --------------------------------------------------------------
@@ -107,7 +104,6 @@
         disposeObject3D(groundHotspotGroup);
         groundHotspotGroup = new THREE.Group();
         groundHotspotEntry = null;
-        // Do NOT clear allGroundHotspotMeshes here – it will be rebuilt in initHotspots
         allGroundHotspotMeshes = [];
         clearPulseCircles();
     }
@@ -150,21 +146,33 @@
         pulseCircles.forEach(function (entry) {
             if (entry.tween) {
                 entry.tween.kill();
+                entry.tween = null;
             }
             if (entry.mesh) {
-                window.tourState.scene.remove(entry.mesh);
-                entry.mesh.geometry.dispose();
+                if (entry.mesh.parent) {
+                    entry.mesh.parent.remove(entry.mesh);
+                }
+                if (entry.mesh.geometry) {
+                    entry.mesh.geometry.dispose();
+                }
                 if (entry.mesh.material) {
+                    if (entry.mesh.material.map) {
+                        entry.mesh.material.map = null;
+                    }
                     entry.mesh.material.dispose();
                 }
-                // Remove from allGroundHotspotMeshes if present
                 var index = allGroundHotspotMeshes.indexOf(entry.mesh);
                 if (index !== -1) {
                     allGroundHotspotMeshes.splice(index, 1);
                 }
+                entry.mesh = null;
             }
         });
         pulseCircles = [];
+        if (pulseCircleTexture) {
+            pulseCircleTexture.dispose();
+            pulseCircleTexture = null;
+        }
     }
 
     function projectHotspotToGround(position) {
@@ -219,7 +227,6 @@
 
             window.tourState.scene.add(mesh);
 
-            // --- ADD PULSE MESH TO RAYCAST TARGETS ---
             allGroundHotspotMeshes.push(mesh);
 
             var delay = index * 0.15;
@@ -234,6 +241,7 @@
                 repeat: -1,
                 delay: delay,
                 onUpdate: function () {
+                    if (!mesh || !mesh.material) return;
                     var s = mesh.scale.x;
                     var normalized = (s - 1.0) / 0.3;
                     mesh.material.opacity = 0.6 - normalized * 0.25;
@@ -303,7 +311,6 @@
             arrow: arrowMesh,
             opacity: 0
         };
-        // Add ring and arrow to raycast targets
         allGroundHotspotMeshes.push(hotspotMesh, arrowMesh);
     }
 
@@ -317,7 +324,6 @@
 
         clearGroundHotspots();
 
-        // Reset allGroundHotspotMeshes – we'll rebuild it
         allGroundHotspotMeshes = [];
 
         if (window.tourState.scene) {
@@ -386,7 +392,6 @@
         window.tourState.hotspotGroup = hotspotGroup;
         window.tourState.groundHotspotGroup = groundHotspotGroup;
 
-        // Create pulse circles – they will be added to allGroundHotspotMeshes inside
         createPulseCircles();
 
         var fwdBtn = document.getElementById('dir-arrow-fwd');
@@ -445,7 +450,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: LASER-DRIVEN ARROW (replaces joystick)
+    //  VR: LASER-DRIVEN ARROW
     // --------------------------------------------------------------
     function getDominantController() {
         var controllers = window.tourState.xrControllers;
@@ -516,7 +521,7 @@
     }
 
     // --------------------------------------------------------------
-    //  UPDATE HOTSPOTS (2D and VR)
+    //  UPDATE HOTSPOTS
     // --------------------------------------------------------------
     function updateHotspots() {
         if (!window.tourState.camera) return;
@@ -611,7 +616,7 @@
     }
 
     // --------------------------------------------------------------
-    //  CLICK HANDLERS (2D) – direct hits only
+    //  CLICK HANDLERS (2D)
     // --------------------------------------------------------------
     function infoHitFromScreen(event) {
         var target = event.target;
@@ -672,7 +677,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: HANDLE TRIGGER SELECT – direct hits only
+    //  VR: HANDLE TRIGGER SELECT
     // --------------------------------------------------------------
     function handleXRSelect(controller) {
         if (!controller) {

@@ -25,7 +25,6 @@
     var vrButtonElement = null;
     var isEnteringVR = false;
 
-    // HUD panel dimensions (Exit button only)
     var PANEL_WIDTH = 0.4;
     var PANEL_HEIGHT = 0.15;
     var PANEL_DISTANCE = 3.0;
@@ -133,7 +132,7 @@
     }
 
     // --------------------------------------------------------------
-    //  BUILD / REBUILD VR UI — only Exit button
+    //  BUILD / REBUILD VR UI
     // --------------------------------------------------------------
     function buildVRUI() {
         destroyVRUI();
@@ -143,7 +142,6 @@
 
         var dist = PANEL_DISTANCE;
 
-        // Exit button, shifted down (y = -0.2) and resized
         exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', PANEL_WIDTH, PANEL_HEIGHT);
         exitButton.position.set(0, -0.2, -dist);
         vrUiGroup.add(exitButton);
@@ -155,20 +153,36 @@
             window.tourState.scene.add(vrUiGroup);
         }
 
-        console.log('[VR] 3D HUD rebuilt (Exit VR only)');
+        console.log('[VR] 3D HUD rebuilt');
     }
 
     function destroyVRUI() {
         if (vrUiGroup) {
+            // Kill any GSAP tweens on all children
+            vrUiGroup.traverse(function (child) {
+                if (child.isMesh) {
+                    gsap.killTweensOf(child);
+                    gsap.killTweensOf(child.position);
+                    gsap.killTweensOf(child.scale);
+                    gsap.killTweensOf(child.material);
+                }
+            });
+            gsap.killTweensOf(vrUiGroup);
+
             if (window.tourState && window.tourState.scene) {
                 window.tourState.scene.remove(vrUiGroup);
             }
+
             vrUiGroup.children.forEach(function (child) {
                 if (child.material) {
-                    if (child.material.map) child.material.map = null;
+                    if (child.material.map) {
+                        child.material.map = null;
+                    }
                     child.material.dispose();
                 }
-                if (child.geometry) child.geometry.dispose();
+                if (child.geometry) {
+                    child.geometry.dispose();
+                }
             });
             vrUiGroup = null;
         }
@@ -322,7 +336,6 @@
 
     function toggleVR() {
         if (isEnteringVR) return;
-
         if (window.tourState.isXRActive) {
             doExitVR();
         } else {
@@ -331,7 +344,7 @@
     }
 
     // --------------------------------------------------------------
-    //  UPDATE VR UI (position follows head)
+    //  UPDATE VR UI
     // --------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -362,7 +375,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR INFO PANEL (unchanged)
+    //  VR INFO PANEL
     // --------------------------------------------------------------
     function buildVRInfoPanel() {
         if (vrInfoMesh && vrInfoMesh.parent) {
@@ -370,9 +383,11 @@
         }
         if (vrInfoTexture) {
             vrInfoTexture.dispose();
+            vrInfoTexture = null;
         }
         if (vrInfoMaterial) {
             vrInfoMaterial.dispose();
+            vrInfoMaterial = null;
         }
 
         vrInfoCanvas = document.createElement('canvas');
@@ -525,7 +540,7 @@
     }
 
     // --------------------------------------------------------------
-    //  SETUP VR BUTTON (2D UI)
+    //  SETUP VR BUTTON
     // --------------------------------------------------------------
     function setupVRButton() {
         if (!vrButtonElement) {

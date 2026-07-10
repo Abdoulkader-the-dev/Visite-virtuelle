@@ -9,9 +9,6 @@
         console.log('[XR] Controls module initialized');
     }
 
-    // --------------------------------------------------------------
-    //  POLL GAMEPADS (joystick input) — now does NOT move arrow
-    // --------------------------------------------------------------
     function pollXRGamepads() {
         if (!window.tourState.isXRActive) return;
 
@@ -24,14 +21,11 @@
         var inputSources = session.inputSources;
         if (!inputSources) return;
 
-        // We no longer move the arrow with joystick.
-        // The arrow is now driven by the laser.
-        // The joystick could be used for other things (camera rotation) but we'll just ignore.
-        // Keep this function for future use, but nothing is done.
+        // Joystick logic no longer used – ignore
     }
 
     // --------------------------------------------------------------
-    //  CLEAR — remove ALL controller state
+    //  CLEAR — remove ALL controller state and listeners
     // --------------------------------------------------------------
     function clearXRControllers() {
         console.log('[XR] Clearing controllers...');
@@ -39,17 +33,37 @@
         if (window.tourState.xrControllers) {
             window.tourState.xrControllers.forEach(function (ctrl) {
                 if (ctrl && ctrl.parent) {
+                    // Remove event listeners
+                    if (ctrl.userData && ctrl.userData.listeners) {
+                        var listeners = ctrl.userData.listeners;
+                        if (listeners.selectstart) {
+                            ctrl.removeEventListener('selectstart', listeners.selectstart);
+                        }
+                        if (listeners.squeezestart) {
+                            ctrl.removeEventListener('squeezestart', listeners.squeezestart);
+                        }
+                        if (listeners.buttondown) {
+                            ctrl.removeEventListener('buttondown', listeners.buttondown);
+                        }
+                    }
                     ctrl.removeFromParent();
                 }
+                // Dispose children
                 while (ctrl && ctrl.children.length > 0) {
                     var child = ctrl.children[0];
                     ctrl.remove(child);
-                    if (child.geometry) child.geometry.dispose();
+                    if (child.geometry) {
+                        child.geometry.dispose();
+                    }
                     if (child.material) {
-                        if (child.material.map) child.material.map = null;
+                        if (child.material.map) {
+                            child.material.map = null;
+                        }
                         child.material.dispose();
                     }
+                    child = null;
                 }
+                ctrl = null;
             });
             window.tourState.xrControllers = [];
         }
@@ -60,6 +74,11 @@
 
         var renderer = window.tourState.renderer;
         if (renderer && renderer.xr && renderer.xr.controllers) {
+            renderer.xr.controllers.forEach(function (ctrl) {
+                if (ctrl && ctrl.parent) {
+                    ctrl.parent.remove(ctrl);
+                }
+            });
             renderer.xr.controllers = [];
             console.log('[XR] Three.js controller cache cleared');
         }
@@ -92,11 +111,10 @@
                 continue;
             }
 
-            controller.userData = { index: i, active: true };
+            controller.userData = { index: i, active: true, listeners: {} };
 
-            window.tourState.scene.add(controller);
-
-            controller.addEventListener('selectstart', function onSelectStart(event) {
+            // Define listeners and store references
+            function onSelectStart(event) {
                 if (!window.tourState.isXRActive) {
                     console.warn('[XR] Select event ignored (not in VR)');
                     return;
@@ -105,17 +123,17 @@
                 if (window.handleXRSelect) {
                     window.handleXRSelect(this);
                 }
-            });
+            }
 
-            controller.addEventListener('squeezestart', function onSqueezeStart() {
+            function onSqueezeStart() {
                 if (!window.tourState.isXRActive) return;
                 console.log('[XR] Grip pressed');
                 if (window.goBack) {
                     window.goBack();
                 }
-            });
+            }
 
-            controller.addEventListener('buttondown', function onButtonDown(event) {
+            function onButtonDown(event) {
                 if (!window.tourState.isXRActive) return;
                 if (event.button === 2) {
                     console.log('[XR] Menu button pressed');
@@ -124,7 +142,17 @@
                         menu.classList.toggle('open');
                     }
                 }
-            });
+            }
+
+            controller.userData.listeners.selectstart = onSelectStart;
+            controller.userData.listeners.squeezestart = onSqueezeStart;
+            controller.userData.listeners.buttondown = onButtonDown;
+
+            controller.addEventListener('selectstart', onSelectStart);
+            controller.addEventListener('squeezestart', onSqueezeStart);
+            controller.addEventListener('buttondown', onButtonDown);
+
+            window.tourState.scene.add(controller);
 
             controllers.push(controller);
             console.log('[XR] Controller ' + i + ' initialized');
@@ -145,7 +173,7 @@
     }
 
     // --------------------------------------------------------------
-    //  FORCE SETUP — called from main.js on session start
+    //  FORCE SETUP
     // --------------------------------------------------------------
     function ensureControllersReady() {
         if (window.tourState.isXRActive) {

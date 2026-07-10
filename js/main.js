@@ -365,16 +365,18 @@
             window.updateVRButtonState(true);
         }
 
-        // --- CRITICAL FIX: Reset renderer XR session to allow re-entry ---
         var renderer = window.tourState.renderer;
         if (renderer && renderer.xr) {
-            // Clear the session reference so a new session can be started
             renderer.xr.setSession(null);
+            renderer.xr.controllers = [];
             console.log('[XR] Renderer session cleared');
         }
 
         window.tourState.camera.position.set(0, 0, 0.001);
         window.tourState.camera.quaternion.identity();
+
+        window.tourState.xrControllers = [];
+        window.tourState.xrInfoPanel = null;
 
         console.log('[XR] Session end cleanup complete');
     }
