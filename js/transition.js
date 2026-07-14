@@ -271,6 +271,14 @@
 
         var clickedHotspot = (options && options.hotspot) || null;
 
+        // Si aucun hotspot n'est fourni, on ne peut pas déterminer la direction d'arrivée
+        if (!clickedHotspot) {
+            console.warn('[Transition] No hotspot provided, cannot determine arrival direction. Cancelling transition.');
+            window.tourState.isTransitioning = false;
+            window.tourState.controlsEnabled = true;
+            return;
+        }
+
         pushHistory(options);
         window.tourState.isTransitioning = true;
         window.tourState.controlsEnabled = false;
