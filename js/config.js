@@ -66,7 +66,7 @@
             // ── ENTRÉE ────────────────────────────────────────────────────────
             '12': {
                 name: 'Entrée',
-                image: './images/12.webp',
+                image: './images/processed/12.webp',
                 defaultBearing: 181.0,
                 defaultLat: 0,
                 minimapX: 50, minimapY: 85,
@@ -80,7 +80,7 @@
             // ── SALLE D'ATTENTE ───────────────────────────────────────────────
             '13': {
                 name: "Salle d'attente",
-                image: './images/13.webp',
+                image: './images/processed/13.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 35, minimapY: 65,
@@ -94,7 +94,7 @@
             // ── ZONES 14 & 15 (liées à la salle d'attente) ───────────────────
             '14': {
                 name: 'Zone 14',
-                image: './images/14.webp',
+                image: './images/processed/14.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 20, minimapY: 50,
@@ -105,7 +105,7 @@
             },
             '15': {
                 name: 'Zone 15',
-                image: './images/15.webp',
+                image: './images/processed/15.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 50, minimapY: 50,
@@ -118,7 +118,7 @@
             // ── ZONE 16 ───────────────────────────────────────────────────────
             '16': {
                 name: 'Zone 16',
-                image: './images/16.webp',
+                image: './images/processed/16.webp',
                 defaultBearing: 177,
                 defaultLat: 0,
                 minimapX: 65, minimapY: 70,
@@ -133,7 +133,7 @@
             // ── SALLE COLLABORATIVE ───────────────────────────────────────────
             '17': {
                 name: 'Salle collaborative',
-                image: './images/17.webp',
+                image: './images/processed/17.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 30, minimapY: 40,
@@ -150,7 +150,7 @@
             // ── ZONES 18-21 (salle collaborative) ─────────────────────────────
             '18': {
                 name: 'Zone 18',
-                image: './images/18.webp',
+                image: './images/processed/18.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 15, minimapY: 28,
@@ -163,7 +163,7 @@
             },
             '19': {
                 name: 'Zone 19',
-                image: './images/19.webp',
+                image: './images/processed/19.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 25, minimapY: 20,
@@ -176,7 +176,7 @@
             },
             '20': {
                 name: 'Zone 20',
-                image: './images/20.webp',
+                image: './images/processed/20.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 40, minimapY: 15,
@@ -189,7 +189,7 @@
             },
             '21': {
                 name: 'Zone 21',
-                image: './images/21.webp',
+                image: './images/processed/21.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 55, minimapY: 20,
@@ -204,7 +204,7 @@
             // ── COULOIRE ──────────────────────────────────────────────────────
             '22': {
                 name: 'Couloire — début',
-                image: './images/22.webp',
+                image: './images/processed/22.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 70, minimapY: 40,
@@ -215,7 +215,7 @@
             },
             '23': {
                 name: 'Couloire — milieu',
-                image: './images/23.webp',
+                image: './images/processed/23.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 70, minimapY: 30,
@@ -227,7 +227,7 @@
             },
             '24': {
                 name: 'Couloire — section 3',
-                image: './images/24.webp',
+                image: './images/processed/24.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 70, minimapY: 20,
@@ -238,7 +238,7 @@
             },
             '25': {
                 name: 'Couloire — section 4',
-                image: './images/25.webp',
+                image: './images/processed/25.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 70, minimapY: 10,
@@ -250,7 +250,7 @@
             },
             '26': {
                 name: 'Couloire — fin',
-                image: './images/26.webp',
+                image: './images/processed/26.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 70, minimapY: 2,
@@ -262,7 +262,7 @@
             // ── DESIGN LAB ────────────────────────────────────────────────────
             '27': {
                 name: 'Design Lab',
-                image: './images/27.webp',
+                image: './images/processed/27.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 85, minimapY: 30,
@@ -274,7 +274,7 @@
             },
             '28': {
                 name: 'Design Lab 28',
-                image: './images/28.webp',
+                image: './images/processed/28.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 90, minimapY: 22,
@@ -284,7 +284,7 @@
             },
             '29': {
                 name: 'Design Lab 29',
-                image: './images/29.webp',
+                image: './images/processed/29.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 95, minimapY: 30,
@@ -296,7 +296,7 @@
             },
             '30': {
                 name: 'Design Lab 30',
-                image: './images/30.webp',
+                image: './images/processed/30.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 90, minimapY: 38,
@@ -306,7 +306,7 @@
             },
             '31': {
                 name: 'Design Lab 31',
-                image: './images/31.webp',
+                image: './images/processed/31.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 95, minimapY: 46,
@@ -318,7 +318,7 @@
             // ── MAKERSPACE ────────────────────────────────────────────────────
             '32': {
                 name: 'Makerspace',
-                image: './images/32.webp',
+                image: './images/processed/32.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 55, minimapY: 10,
@@ -331,7 +331,7 @@
             },
             '33': {
                 name: 'Makerspace 33',
-                image: './images/33.webp',
+                image: './images/processed/33.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 45, minimapY: 4,
@@ -342,7 +342,7 @@
             },
             '34': {
                 name: 'Makerspace 34',
-                image: './images/34.webp',
+                image: './images/processed/34.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 55, minimapY: 2,
@@ -353,7 +353,7 @@
             },
             '35': {
                 name: 'Makerspace 35',
-                image: './images/35.webp',
+                image: './images/processed/35.webp',
                 defaultBearing: 0,
                 defaultLat: 0,
                 minimapX: 65, minimapY: 4,
