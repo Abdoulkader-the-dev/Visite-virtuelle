@@ -271,31 +271,27 @@
 
         var clickedHotspot = (options && options.hotspot) || null;
 
-        // Si aucun hotspot n'est fourni, on ne peut pas déterminer la direction d'arrivée
-        if (!clickedHotspot) {
-            console.warn('[Transition] No hotspot provided, cannot determine arrival direction. Cancelling transition.');
-            window.tourState.isTransitioning = false;
-            window.tourState.controlsEnabled = true;
-            return;
-        }
-
         pushHistory(options);
         window.tourState.isTransitioning = true;
         window.tourState.controlsEnabled = false;
         if (window.hideInfoCard) { window.hideInfoCard(); }
 
-        // Determine arrival lon/lat from hotspot (or fallback)
+        // Determine arrival lon/lat from hotspot (or use bearing if no hotspot)
         var arrivalTargetLon, arrivalTargetLat;
-        if (clickedHotspot && typeof clickedHotspot.arrivalLon === 'number') {
-            arrivalTargetLon = normalizeDegrees(clickedHotspot.arrivalLon);
+        if (clickedHotspot) {
+            if (typeof clickedHotspot.arrivalLon === 'number') {
+                arrivalTargetLon = normalizeDegrees(clickedHotspot.arrivalLon);
+            } else {
+                // fallback: opposite direction of the clicked hotspot
+                var movementAngle = Math.atan2(clickedHotspot.position.x, -clickedHotspot.position.z) * (180 / Math.PI);
+                arrivalTargetLon = normalizeDegrees(movementAngle + 180);
+            }
+            arrivalTargetLat = (typeof clickedHotspot.arrivalLat === 'number') ? clickedHotspot.arrivalLat : 0;
         } else {
-            // fallback: opposite direction of the clicked hotspot
-            var movementAngle = Math.atan2(clickedHotspot.position.x, -clickedHotspot.position.z) * (180 / Math.PI);
-            arrivalTargetLon = normalizeDegrees(movementAngle + 180);
+            // No hotspot: use the bearing passed as argument (or default to current lon)
+            arrivalTargetLon = normalizeDegrees(bearing || window.tourState.lon);
+            arrivalTargetLat = 0;
         }
-        arrivalTargetLat = (clickedHotspot && typeof clickedHotspot.arrivalLat === 'number')
-            ? clickedHotspot.arrivalLat
-            : 0;
 
         var overlay = document.getElementById('transition-overlay');
 
