@@ -1,0 +1,11 @@
+{
+    "name": "image-processor",
+    "version": "1.0.0",
+    "description": "Traite les images 360°",
+    "dependencies": {
+        "sharp": "^0.33.0"
+    },
+    "scripts": {
+        "start": "node process-images.js"
+    }
+}
