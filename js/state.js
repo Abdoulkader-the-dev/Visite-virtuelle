@@ -18,7 +18,8 @@
         autoRotating: false,
         camera: null,
         renderer: null,
-        scene: null,
+        scene: null,          // Scène racine Three.js
+        vrGroup: null,        // Groupe contenant tous les éléments 3D (sphère, hotspots, HUD)
         sphere: null,
         controlsEnabled: true,
         activeFloorHotspot: null,

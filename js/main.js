@@ -256,7 +256,6 @@
 
     function renderFrame(timestamp, frame) {
         updateAutoRotation();
-        // En VR, la caméra est contrôlée par le casque, on saute la mise à jour
         if (!window.tourState.isXRActive) {
             updateCameraLookAt();
         }
@@ -321,6 +320,11 @@
         window.tourState.isXRActive = true;
         document.body.classList.add('xr-active');
 
+        // Décaler le groupe VR vers le bas pour compenser la hauteur de la caméra
+        if (window.tourState.vrGroup) {
+            window.tourState.vrGroup.position.y = -1.6;
+        }
+
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
@@ -346,6 +350,11 @@
         console.log('[XR] Session end event');
 
         window.tourState.isXRActive = false;
+
+        // Remettre le groupe VR à la position normale
+        if (window.tourState.vrGroup) {
+            window.tourState.vrGroup.position.y = 0;
+        }
 
         if (window.hideVRUI) {
             window.hideVRUI();
@@ -408,15 +417,21 @@
         renderer.xr.addEventListener('sessionstart', onXRSessionStart);
         renderer.xr.addEventListener('sessionend', onXRSessionEnd);
 
+        // --- Groupe VR : contient tous les objets 3D ---
+        var vrGroup = new THREE.Group();
+        vrGroup.name = 'vrGroup';
+        scene.add(vrGroup);
+        window.tourState.vrGroup = vrGroup;
+
         var sphere = createSphere();
-        scene.add(sphere);
+        vrGroup.add(sphere);
 
         var sphere2 = createSphere();
         sphere2.material.opacity = 0;
         sphere2.material.depthWrite = false;
         sphere2.scale.set(0.99, 0.99, 0.99);
         sphere2.visible = false;
-        scene.add(sphere2);
+        vrGroup.add(sphere2);
 
         textureLoader = new THREE.TextureLoader();
         textureLoader.setCrossOrigin('anonymous');

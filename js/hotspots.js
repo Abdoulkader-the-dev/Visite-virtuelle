@@ -98,8 +98,9 @@
     }
 
     function clearGroundHotspots() {
-        if (window.tourState.scene) {
-            window.tourState.scene.remove(groundHotspotGroup);
+        var vrGroup = window.tourState.vrGroup;
+        if (vrGroup) {
+            vrGroup.remove(groundHotspotGroup);
         }
         disposeObject3D(groundHotspotGroup);
         groundHotspotGroup = new THREE.Group();
@@ -202,6 +203,8 @@
 
         var texture = createPulseCircleTexture();
         var hotspots = transitionHotspots();
+        var vrGroup = window.tourState.vrGroup;
+        if (!vrGroup) return;
 
         hotspots.forEach(function (hotspot, index) {
             var groundPos = projectHotspotToGround(hotspot.position);
@@ -225,7 +228,7 @@
             mesh.renderOrder = 4;
             mesh.userData.hotspot = hotspot;
 
-            window.tourState.scene.add(mesh);
+            vrGroup.add(mesh);
 
             allGroundHotspotMeshes.push(mesh);
 
@@ -301,8 +304,9 @@
         groundHotspotGroup.add(hotspotMesh);
         groundHotspotGroup.add(arrowMesh);
 
-        if (window.tourState.scene && !window.tourState.scene.children.includes(groundHotspotGroup)) {
-            window.tourState.scene.add(groundHotspotGroup);
+        var vrGroup = window.tourState.vrGroup;
+        if (vrGroup && !vrGroup.children.includes(groundHotspotGroup)) {
+            vrGroup.add(groundHotspotGroup);
         }
 
         groundHotspotEntry = {
@@ -326,8 +330,9 @@
 
         allGroundHotspotMeshes = [];
 
-        if (window.tourState.scene) {
-            window.tourState.scene.remove(hotspotGroup);
+        var vrGroup = window.tourState.vrGroup;
+        if (vrGroup) {
+            vrGroup.remove(hotspotGroup);
         }
         disposeObject3D(hotspotGroup);
         hotspotGroup = new THREE.Group();
@@ -382,10 +387,10 @@
             }
         });
 
-        if (window.tourState.scene) {
-            window.tourState.scene.add(hotspotGroup);
-            if (!window.tourState.scene.children.includes(groundHotspotGroup)) {
-                window.tourState.scene.add(groundHotspotGroup);
+        if (vrGroup) {
+            vrGroup.add(hotspotGroup);
+            if (!vrGroup.children.includes(groundHotspotGroup)) {
+                vrGroup.add(groundHotspotGroup);
             }
         }
 

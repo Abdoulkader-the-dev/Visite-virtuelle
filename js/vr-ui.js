@@ -149,8 +149,10 @@
         window.vrExitButton = exitButton;
         window.vrHudPanels = [exitButton];
 
-        if (window.tourState && window.tourState.scene) {
-            window.tourState.scene.add(vrUiGroup);
+        // Ajouter le HUD au groupe VR (et non à la scène racine)
+        var vrGroup = window.tourState.vrGroup;
+        if (vrGroup) {
+            vrGroup.add(vrUiGroup);
         }
 
         console.log('[VR] 3D HUD rebuilt');
@@ -169,8 +171,10 @@
             });
             gsap.killTweensOf(vrUiGroup);
 
-            if (window.tourState && window.tourState.scene) {
-                window.tourState.scene.remove(vrUiGroup);
+            // Retirer du groupe VR
+            var vrGroup = window.tourState.vrGroup;
+            if (vrGroup) {
+                vrGroup.remove(vrUiGroup);
             }
 
             vrUiGroup.children.forEach(function (child) {
@@ -410,8 +414,10 @@
         vrInfoMesh.renderOrder = 5;
         vrInfoMesh.visible = false;
 
-        if (window.tourState && window.tourState.scene) {
-            window.tourState.scene.add(vrInfoMesh);
+        // Ajouter au groupe VR (et non à la scène racine)
+        var vrGroup = window.tourState.vrGroup;
+        if (vrGroup) {
+            vrGroup.add(vrInfoMesh);
         }
 
         vrInfoPanel = {
