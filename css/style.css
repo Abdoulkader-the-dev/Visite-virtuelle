@@ -629,6 +629,7 @@ body.has-history #nav-toggle {
     animation: spin 2s linear infinite;
 }
 
+/* === Correction VR : masquer les éléments 2D superflus === */
 body.xr-active #nav-menu,
 body.xr-active #nav-toggle,
 body.xr-active #back-btn,
@@ -636,7 +637,8 @@ body.xr-active #minimap,
 body.xr-active #zoom-controls,
 body.xr-active #fullscreen-btn,
 body.xr-active #compass,
-body.xr-active #info-card {
+body.xr-active #info-card,
+body.xr-active #hotspot-container {
     opacity: 0;
     pointer-events: none;
 }

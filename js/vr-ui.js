@@ -221,7 +221,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR ENTRY / EXIT
+    //  VR ENTRY / EXIT  (correction : setReferenceSpaceType('local-floor'))
     // --------------------------------------------------------------
     function enterVR() {
         if (isEnteringVR) return;
@@ -257,6 +257,9 @@
                         window.doExitVR();
                     }
                 });
+
+                // Force l'utilisation de l'espace local-floor pour la hauteur réelle
+                renderer.xr.setReferenceSpaceType('local-floor');
 
                 renderer.xr.setSession(session).then(function () {
                     isEnteringVR = false;

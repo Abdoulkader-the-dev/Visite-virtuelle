@@ -256,7 +256,10 @@
 
     function renderFrame(timestamp, frame) {
         updateAutoRotation();
-        updateCameraLookAt();
+        // En VR, la caméra est contrôlée par le casque, on saute la mise à jour
+        if (!window.tourState.isXRActive) {
+            updateCameraLookAt();
+        }
 
         if (window.updateHotspots) {
             window.updateHotspots();
