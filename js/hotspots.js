@@ -5,7 +5,7 @@
     var infoElements = [];
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
-    var GROUND_Y = -2;
+    var GROUND_Y = -1; // ← modifié de -2 à -1
     var GROUND_HOTSPOT_INNER_RADIUS = 0.12;
     var GROUND_HOTSPOT_OUTER_RADIUS = 0.36;
     var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
@@ -21,7 +21,7 @@
     var allGroundHotspotMeshes = [];
 
     var pulseCircles = [];
-    var PULSE_CIRCLE_RADIUS = 0.5; // doubled from 0.25
+    var PULSE_CIRCLE_RADIUS = 0.5;
     var pulseCircleTexture = null;
 
     // --------------------------------------------------------------
@@ -198,6 +198,26 @@
         return new THREE.Vector3(px, GROUND_Y, pz);
     }
 
+    function updatePulseColors(highlightedHotspot) {
+        // Réinitialise tous les cercles en rouge, puis met en bleu celui qui est survolé
+        pulseCircles.forEach(function (entry) {
+            var mesh = entry.mesh;
+            if (!mesh) return;
+            // Couleur par défaut : rouge
+            mesh.material.color.setHex(0xff0000);
+        });
+        if (highlightedHotspot) {
+            // Cherche le cercle correspondant à ce hotspot
+            pulseCircles.forEach(function (entry) {
+                var mesh = entry.mesh;
+                if (!mesh) return;
+                if (mesh.userData.hotspot === highlightedHotspot) {
+                    mesh.material.color.setHex(0x60A5FA); // bleu clair
+                }
+            });
+        }
+    }
+
     function createPulseCircles() {
         clearPulseCircles();
 
@@ -218,9 +238,10 @@
             var mat = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 0.6,
+                opacity: 0.85, // ← augmente de 0.6 à 0.85
                 side: THREE.DoubleSide,
-                depthWrite: false
+                depthWrite: false,
+                color: 0xff0000 // ← couleur rouge par défaut
             });
 
             var mesh = new THREE.Mesh(geo, mat);
@@ -247,7 +268,7 @@
                     if (!mesh || !mesh.material) return;
                     var s = mesh.scale.x;
                     var normalized = (s - 1.0) / 0.3;
-                    mesh.material.opacity = 0.6 - normalized * 0.25;
+                    mesh.material.opacity = 0.85 - normalized * 0.25; // ajuste pour rester entre 0.6 et 0.85
                 }
             });
 
@@ -482,6 +503,7 @@
             groundHotspotEntry.hotspot = null;
             groundHotspotEntry.ring.userData.hotspot = null;
             groundHotspotEntry.arrow.userData.hotspot = null;
+            updatePulseColors(null); // ← réinitialise les couleurs
             return;
         }
 
@@ -523,6 +545,9 @@
 
         groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
         groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
+
+        // Met à jour les couleurs des cercles pulsants selon le survol
+        updatePulseColors(nearest);
     }
 
     // --------------------------------------------------------------

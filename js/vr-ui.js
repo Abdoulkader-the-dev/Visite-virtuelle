@@ -25,8 +25,8 @@
     var vrButtonElement = null;
     var isEnteringVR = false;
 
-    var PANEL_WIDTH = 0.4;
-    var PANEL_HEIGHT = 0.15;
+    var PANEL_WIDTH = 0.35;   // ← réduction
+    var PANEL_HEIGHT = 0.12;  // ← réduction
     var PANEL_DISTANCE = 3.0;
 
     // --------------------------------------------------------------
@@ -143,7 +143,7 @@
         var dist = PANEL_DISTANCE;
 
         exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', PANEL_WIDTH, PANEL_HEIGHT);
-        exitButton.position.set(0, -0.2, -dist);
+        exitButton.position.set(0, 0.4, -dist); // ← déplacé plus haut (y = 0.4)
         vrUiGroup.add(exitButton);
 
         window.vrExitButton = exitButton;
@@ -351,7 +351,7 @@
     }
 
     // --------------------------------------------------------------
-    //  UPDATE VR UI
+    //  UPDATE VR UI  (correction : suppression de rotateY(Math.PI))
     // --------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -372,7 +372,7 @@
 
         vrUiGroup.position.copy(position);
         vrUiGroup.lookAt(camera.position);
-        vrUiGroup.rotateY(Math.PI);
+        // ← rotateY(Math.PI) supprimé pour éviter le miroir
 
         vrUiGroup.visible = true;
 
@@ -524,7 +524,7 @@
 
         vrInfoPanel.mesh.position.copy(panelPosition);
         vrInfoPanel.mesh.lookAt(camera.position);
-        vrInfoPanel.mesh.rotateY(Math.PI);
+        // ← rotateY(Math.PI) supprimé
     }
 
     function checkVRInfoPanelClose(raycaster) {
