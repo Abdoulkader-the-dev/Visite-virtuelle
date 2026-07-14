@@ -5,7 +5,7 @@
     var infoElements = [];
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
-    var GROUND_Y = -1; // ← modifié de -2 à -1
+    var GROUND_Y = -1; // modifié de -2 à -1
     var GROUND_HOTSPOT_INNER_RADIUS = 0.12;
     var GROUND_HOTSPOT_OUTER_RADIUS = 0.36;
     var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
@@ -124,17 +124,17 @@
         var r = size / 2 - 2;
 
         var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grad.addColorStop(0, 'rgba(220, 38, 38, 0.7)');
-        grad.addColorStop(0.6, 'rgba(220, 38, 38, 0.55)');
-        grad.addColorStop(0.85, 'rgba(220, 38, 38, 0.3)');
-        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+        grad.addColorStop(0, 'rgba(30, 144, 255, 0.7)');   // bleu ciel foncé
+        grad.addColorStop(0.6, 'rgba(30, 144, 255, 0.55)');
+        grad.addColorStop(0.85, 'rgba(30, 144, 255, 0.3)');
+        grad.addColorStop(1, 'rgba(30, 144, 255, 0)');
 
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
+        ctx.fillStyle = 'rgba(30, 144, 255, 0.85)';
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -199,12 +199,12 @@
     }
 
     function updatePulseColors(highlightedHotspot) {
-        // Réinitialise tous les cercles en rouge, puis met en bleu celui qui est survolé
+        // Réinitialise tous les cercles en bleu, puis met en bleu plus soutenu celui qui est survolé
         pulseCircles.forEach(function (entry) {
             var mesh = entry.mesh;
             if (!mesh) return;
-            // Couleur par défaut : rouge
-            mesh.material.color.setHex(0xff0000);
+            // Couleur par défaut : bleu ciel foncé
+            mesh.material.color.setHex(0x1E90FF);
         });
         if (highlightedHotspot) {
             // Cherche le cercle correspondant à ce hotspot
@@ -212,7 +212,7 @@
                 var mesh = entry.mesh;
                 if (!mesh) return;
                 if (mesh.userData.hotspot === highlightedHotspot) {
-                    mesh.material.color.setHex(0x60A5FA); // bleu clair
+                    mesh.material.color.setHex(0x4169E1); // bleu plus soutenu
                 }
             });
         }
@@ -238,10 +238,10 @@
             var mat = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 0.85, // ← augmente de 0.6 à 0.85
+                opacity: 0.85,
                 side: THREE.DoubleSide,
                 depthWrite: false,
-                color: 0xff0000 // ← couleur rouge par défaut
+                color: 0x1E90FF // ← bleu ciel foncé
             });
 
             var mesh = new THREE.Mesh(geo, mat);
@@ -268,7 +268,7 @@
                     if (!mesh || !mesh.material) return;
                     var s = mesh.scale.x;
                     var normalized = (s - 1.0) / 0.3;
-                    mesh.material.opacity = 0.85 - normalized * 0.25; // ajuste pour rester entre 0.6 et 0.85
+                    mesh.material.opacity = 0.85 - normalized * 0.25;
                 }
             });
 
@@ -476,7 +476,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: LASER-DRIVEN ARROW
+    //  VR: LASER-DRIVEN ARROW (modifié : détection directe, plus de flèche)
     // --------------------------------------------------------------
     function getDominantController() {
         var controllers = window.tourState.xrControllers;
@@ -485,69 +485,39 @@
     }
 
     function updateVRArrowFromLaser() {
-        if (!groundHotspotEntry) return;
         if (!window.tourState.isXRActive) return;
+        // Masquer la flèche au sol en VR
+        groundHotspotGroup.visible = false;
 
         var controller = getDominantController();
-        if (!controller) return;
-
-        var raycaster = window.xrRaycasterFromController ? window.xrRaycasterFromController(controller) : null;
-        if (!raycaster) return;
-
-        var intersectPoint = new THREE.Vector3();
-        var hit = raycaster.ray.intersectPlane(groundPlane, intersectPoint);
-        if (!hit) {
-            groundHotspotEntry.opacity = 0;
-            groundHotspotEntry.ring.material.opacity = 0;
-            groundHotspotEntry.arrow.material.opacity = 0;
-            groundHotspotEntry.hotspot = null;
-            groundHotspotEntry.ring.userData.hotspot = null;
-            groundHotspotEntry.arrow.userData.hotspot = null;
-            updatePulseColors(null); // ← réinitialise les couleurs
+        if (!controller) {
+            updatePulseColors(null);
             return;
         }
 
-        var horizontalLength = Math.sqrt(intersectPoint.x * intersectPoint.x + intersectPoint.z * intersectPoint.z);
-        if (horizontalLength > MAX_FOLLOW_RADIUS) {
-            var scale = MAX_FOLLOW_RADIUS / horizontalLength;
-            intersectPoint.x *= scale;
-            intersectPoint.z *= scale;
-        } else if (horizontalLength < MIN_FOLLOW_RADIUS && horizontalLength > 0.01) {
-            var scale2 = MIN_FOLLOW_RADIUS / horizontalLength;
-            intersectPoint.x *= scale2;
-            intersectPoint.z *= scale2;
+        var raycaster = window.xrRaycasterFromController ? window.xrRaycasterFromController(controller) : null;
+        if (!raycaster) {
+            updatePulseColors(null);
+            return;
         }
 
-        var nearest = nearestTransitionHotspot(intersectPoint);
-
-        groundHotspotEntry.ring.position.copy(intersectPoint);
-        groundHotspotEntry.arrow.position.copy(intersectPoint);
-        groundHotspotEntry.arrow.position.y += 0.01;
-
-        if (nearest) {
-            groundHotspotEntry.hotspot = nearest;
-            groundHotspotEntry.ring.userData.hotspot = nearest;
-            groundHotspotEntry.arrow.userData.hotspot = nearest;
-
-            var dx = nearest.positionVector.x - intersectPoint.x;
-            var dz = nearest.positionVector.z - intersectPoint.z;
-            var angle = Math.atan2(-dx, -dz);
-            groundHotspotEntry.ring.rotation.y = angle;
-            groundHotspotEntry.arrow.rotation.y = angle;
-
-            groundHotspotEntry.opacity = 0.85;
-        } else {
-            groundHotspotEntry.hotspot = null;
-            groundHotspotEntry.ring.userData.hotspot = null;
-            groundHotspotEntry.arrow.userData.hotspot = null;
-            groundHotspotEntry.opacity = 0.3;
+        // Détection directe sur les cercles pulsants
+        if (allGroundHotspotMeshes.length === 0) {
+            updatePulseColors(null);
+            return;
         }
 
-        groundHotspotEntry.ring.material.opacity = groundHotspotEntry.opacity;
-        groundHotspotEntry.arrow.material.opacity = groundHotspotEntry.opacity;
+        var hits = raycaster.intersectObjects(allGroundHotspotMeshes, false);
+        if (hits.length > 0) {
+            var hitMesh = hits[0].object;
+            var hotspot = hitMesh.userData.hotspot;
+            if (hotspot) {
+                updatePulseColors(hotspot);
+                return;
+            }
+        }
 
-        // Met à jour les couleurs des cercles pulsants selon le survol
-        updatePulseColors(nearest);
+        updatePulseColors(null);
     }
 
     // --------------------------------------------------------------
@@ -559,6 +529,8 @@
         if (window.tourState.isXRActive) {
             updateVRArrowFromLaser();
         } else {
+            // En mode 2D, on réaffiche la flèche au sol si besoin
+            groundHotspotGroup.visible = true;
             updateMouseArrow();
         }
 
