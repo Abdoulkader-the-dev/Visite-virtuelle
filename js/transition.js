@@ -268,6 +268,7 @@
         var camera = window.tourState.camera;
         var scene = window.tourState.scene;
         var oldSphere = window.tourState.sphere;
+        var vrGroup = window.tourState.vrGroup;
 
         var clickedHotspot = (options && options.hotspot) || null;
 
@@ -308,7 +309,7 @@
             if (switched) return;
             switched = true;
 
-            // --- Swap spheres ---
+            // --- Swap spheres inside vrGroup (or fallback to scene if missing) ---
             var newSphere = window.createSphere();
             newSphere.material.map = tex;
             newSphere.material.needsUpdate = true;
@@ -318,9 +319,10 @@
             var defaultLat = sceneConfig.defaultLat || 0;
             newSphere.rotation.x = -defaultLat * Math.PI / 180;
 
-            scene.add(newSphere);
+            var parentGroup = vrGroup || scene;
+            parentGroup.add(newSphere);
             if (oldSphere) {
-                scene.remove(oldSphere);
+                parentGroup.remove(oldSphere);
                 oldSphere.geometry.dispose();
                 oldSphere.material.dispose();
             }
