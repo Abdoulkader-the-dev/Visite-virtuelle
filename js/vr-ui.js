@@ -1,3 +1,6 @@
+// =============================================================================
+//  vr-ui.js  —  Fichier complet avec les corrections du panneau VR
+// =============================================================================
 (function () {
     'use strict';
 
@@ -25,9 +28,9 @@
     var vrButtonElement = null;
     var isEnteringVR = false;
 
-    var PANEL_WIDTH = 0.35;   // ← réduction
-    var PANEL_HEIGHT = 0.12;  // ← réduction
-    var PANEL_DISTANCE = 3.0;
+    var PANEL_WIDTH = 0.35;
+    var PANEL_HEIGHT = 0.12;
+    var PANEL_DISTANCE = 0.5; // ← Correction 2 : distance réduite à 0.5
 
     // --------------------------------------------------------------
     //  SUPPORT CHECK
@@ -143,7 +146,7 @@
         var dist = PANEL_DISTANCE;
 
         exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', PANEL_WIDTH, PANEL_HEIGHT);
-        exitButton.position.set(0, 0.4, -dist); // ← déplacé plus haut (y = 0.4)
+        exitButton.position.set(0, 0.4, -dist);
         vrUiGroup.add(exitButton);
 
         window.vrExitButton = exitButton;
@@ -225,7 +228,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR ENTRY / EXIT  (correction : setReferenceSpaceType('local-floor'))
+    //  VR ENTRY / EXIT
     // --------------------------------------------------------------
     function enterVR() {
         if (isEnteringVR) return;
@@ -262,9 +265,7 @@
                     }
                 });
 
-                // Force l'utilisation de l'espace local-floor pour la hauteur réelle
                 renderer.xr.setReferenceSpaceType('local-floor');
-
                 renderer.xr.setSession(session).then(function () {
                     isEnteringVR = false;
                     buildVRUI();
@@ -351,7 +352,7 @@
     }
 
     // --------------------------------------------------------------
-    //  UPDATE VR UI  (correction : suppression de rotateY(Math.PI))
+    //  UPDATE VR UI — position fixe en haut à gauche
     // --------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -362,17 +363,21 @@
         var camera = window.tourState.camera;
         if (!camera) return;
 
-        var forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        forward.y = 0;
-        forward.normalize();
+        // Récupérer les vecteurs de direction de la caméra
+        var forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        var right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        var up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
 
-        var position = camera.position.clone();
-        position.add(forward.clone().multiplyScalar(PANEL_DISTANCE + 0.2));
+        // Position relative : en haut à gauche du champ de vision
+        // x = -0.8 (gauche), y = 0.6 (haut), z = -PANEL_DISTANCE (devant)
+        var offset = new THREE.Vector3()
+            .addScaledVector(right, -0.8)
+            .addScaledVector(up, 0.6)
+            .addScaledVector(forward, -PANEL_DISTANCE);
 
-        vrUiGroup.position.copy(position);
+        var pos = camera.position.clone().add(offset);
+        vrUiGroup.position.copy(pos);
         vrUiGroup.lookAt(camera.position);
-        // ← rotateY(Math.PI) supprimé pour éviter le miroir
 
         vrUiGroup.visible = true;
 
@@ -524,7 +529,6 @@
 
         vrInfoPanel.mesh.position.copy(panelPosition);
         vrInfoPanel.mesh.lookAt(camera.position);
-        // ← rotateY(Math.PI) supprimé
     }
 
     function checkVRInfoPanelClose(raycaster) {

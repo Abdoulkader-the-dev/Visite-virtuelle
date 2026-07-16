@@ -1,3 +1,6 @@
+// =============================================================================
+//  hotspots.js  —  Fichier complet avec les corrections pour le mode VR
+// =============================================================================
 (function () {
     'use strict';
 
@@ -11,6 +14,7 @@
     var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
     var MIN_FOLLOW_RADIUS = 1.2;
     var MAX_FOLLOW_RADIUS = 8;
+    var MAX_HOTSPOT_DISTANCE = 0.4; // Nouvelle constante pour limiter la distance en VR
     var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
     var groundPoint = new THREE.Vector3();
 
@@ -109,6 +113,7 @@
         clearPulseCircles();
     }
 
+    // Texture générique (bleu par défaut, sera teintée par la couleur du matériau)
     function createPulseCircleTexture() {
         if (pulseCircleTexture) {
             return pulseCircleTexture;
@@ -123,18 +128,20 @@
         var cy = size / 2;
         var r = size / 2 - 2;
 
+        // Dégradé en niveaux de gris pour pouvoir le teinter avec la couleur du matériau
         var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grad.addColorStop(0, 'rgba(30, 144, 255, 0.7)');   // bleu ciel foncé
-        grad.addColorStop(0.6, 'rgba(30, 144, 255, 0.55)');
-        grad.addColorStop(0.85, 'rgba(30, 144, 255, 0.3)');
-        grad.addColorStop(1, 'rgba(30, 144, 255, 0)');
+        grad.addColorStop(0, 'rgba(255,255,255,0.7)');
+        grad.addColorStop(0.6, 'rgba(255,255,255,0.55)');
+        grad.addColorStop(0.85, 'rgba(255,255,255,0.3)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
 
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = 'rgba(30, 144, 255, 0.85)';
+        // Point central blanc
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -198,21 +205,22 @@
         return new THREE.Vector3(px, GROUND_Y, pz);
     }
 
+    // Mise à jour des couleurs uniquement en VR
     function updatePulseColors(highlightedHotspot) {
+        if (!window.tourState.isXRActive) return; // ← Correction 1 : survol réservé au VR
+
         // Réinitialise tous les cercles en bleu, puis met en bleu plus soutenu celui qui est survolé
         pulseCircles.forEach(function (entry) {
             var mesh = entry.mesh;
             if (!mesh) return;
-            // Couleur par défaut : bleu ciel foncé
             mesh.material.color.setHex(0x1E90FF);
         });
         if (highlightedHotspot) {
-            // Cherche le cercle correspondant à ce hotspot
             pulseCircles.forEach(function (entry) {
                 var mesh = entry.mesh;
                 if (!mesh) return;
                 if (mesh.userData.hotspot === highlightedHotspot) {
-                    mesh.material.color.setHex(0x4169E1); // bleu plus soutenu
+                    mesh.material.color.setHex(0x4169E1);
                 }
             });
         }
@@ -226,6 +234,8 @@
         var vrGroup = window.tourState.vrGroup;
         if (!vrGroup) return;
 
+        var isVR = window.tourState.isXRActive; // ← Correction 1 : conditionner le style
+
         hotspots.forEach(function (hotspot, index) {
             var groundPos = projectHotspotToGround(hotspot.position);
 
@@ -238,10 +248,10 @@
             var mat = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 0.85,
+                opacity: isVR ? 0.85 : 0.6,      // ← Correction 1 : opacité différente
                 side: THREE.DoubleSide,
                 depthWrite: false,
-                color: 0x1E90FF // ← bleu ciel foncé
+                color: isVR ? 0x1E90FF : 0xFF0000 // ← Correction 1 : bleu en VR, rouge en 2D
             });
 
             var mesh = new THREE.Mesh(geo, mat);
@@ -268,7 +278,7 @@
                     if (!mesh || !mesh.material) return;
                     var s = mesh.scale.x;
                     var normalized = (s - 1.0) / 0.3;
-                    mesh.material.opacity = 0.85 - normalized * 0.25;
+                    mesh.material.opacity = (isVR ? 0.85 : 0.6) - normalized * 0.25;
                 }
             });
 
