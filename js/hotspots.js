@@ -21,7 +21,6 @@
     var allGroundHotspotMeshes = [];
 
     var pulseCircles = [];
-    var PULSE_CIRCLE_RADIUS = 0.5; // valeur par défaut, sera ajustée en fonction du mode
     var pulseCircleTexture = null;
 
     // --------------------------------------------------------------
@@ -109,6 +108,7 @@
         clearPulseCircles();
     }
 
+    // Texture NEUTRE (blanc/gris) pour que material.color la teinte
     function createPulseCircleTexture() {
         if (pulseCircleTexture) {
             return pulseCircleTexture;
@@ -123,18 +123,20 @@
         var cy = size / 2;
         var r = size / 2 - 2;
 
+        // Dégradé blanc → gris transparent
         var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grad.addColorStop(0, 'rgba(220, 38, 38, 0.7)');
-        grad.addColorStop(0.6, 'rgba(220, 38, 38, 0.55)');
-        grad.addColorStop(0.85, 'rgba(220, 38, 38, 0.3)');
-        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+        grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+        grad.addColorStop(0.6, 'rgba(255,255,255,0.6)');
+        grad.addColorStop(0.85, 'rgba(255,255,255,0.3)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
 
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
+        // Point central blanc
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -198,14 +200,16 @@
         return new THREE.Vector3(px, GROUND_Y, pz);
     }
 
-    // Pas de fonction updatePulseColors (supprimée)
-
+    // --------------------------------------------------------------
+    //  CREATE PULSE CIRCLES  (correction : texture neutre, taille + couleur conditionnelles)
+    // --------------------------------------------------------------
     function createPulseCircles() {
         clearPulseCircles();
 
-        // ← UNIQUE MODIFICATION : taille conditionnelle selon le mode
         var isVR = window.tourState.isXRActive;
-        var radius = isVR ? 0.5 : 0.25;
+        var radius = isVR ? 0.5 : 0.25;        // ← taille : 0.5 en VR, 0.25 en 2D
+        var color = isVR ? 0x1E90FF : 0xFF0000; // ← couleur : bleu en VR, rouge en 2D
+        var opacity = isVR ? 0.85 : 0.6;
 
         var texture = createPulseCircleTexture();
         var hotspots = transitionHotspots();
@@ -215,19 +219,16 @@
         hotspots.forEach(function (hotspot, index) {
             var groundPos = projectHotspotToGround(hotspot.position);
 
-            var geo = new THREE.PlaneGeometry(
-                radius * 2,
-                radius * 2
-            );
+            var geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
             geo.rotateX(-Math.PI / 2);
 
             var mat = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: isVR ? 0.85 : 0.6,
+                opacity: opacity,
                 side: THREE.DoubleSide,
                 depthWrite: false,
-                color: isVR ? 0x1E90FF : 0xFF0000
+                color: color
             });
 
             var mesh = new THREE.Mesh(geo, mat);
@@ -236,11 +237,9 @@
             mesh.userData.hotspot = hotspot;
 
             vrGroup.add(mesh);
-
             allGroundHotspotMeshes.push(mesh);
 
             var delay = index * 0.15;
-
             var tween = gsap.to(mesh.scale, {
                 x: 1.3,
                 y: 1.3,
@@ -254,7 +253,7 @@
                     if (!mesh || !mesh.material) return;
                     var s = mesh.scale.x;
                     var normalized = (s - 1.0) / 0.3;
-                    mesh.material.opacity = (isVR ? 0.85 : 0.6) - normalized * 0.25;
+                    mesh.material.opacity = opacity - normalized * 0.25;
                 }
             });
 
@@ -262,6 +261,9 @@
         });
     }
 
+    // --------------------------------------------------------------
+    //  GROUND HOTSPOT (flèche au sol) – inchangé
+    // --------------------------------------------------------------
     function createGroundHotspot() {
         var ringGeo = new THREE.RingGeometry(GROUND_HOTSPOT_INNER_RADIUS, GROUND_HOTSPOT_OUTER_RADIUS, 64);
         var ringMat = new THREE.MeshBasicMaterial({
@@ -334,7 +336,6 @@
         infoElements = [];
 
         clearGroundHotspots();
-
         allGroundHotspotMeshes = [];
 
         var vrGroup = window.tourState.vrGroup;
@@ -367,7 +368,6 @@
                 createGroundHotspot();
             }
 
-            var marker = null;
             if (hotspot.type !== 'transition') {
                 var canvas = document.createElement('canvas');
                 canvas.width = 64;
@@ -385,9 +385,8 @@
 
                 var texture = new THREE.CanvasTexture(canvas);
                 var spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-                marker = new THREE.Sprite(spriteMat);
+                var marker = new THREE.Sprite(spriteMat);
                 marker.scale.set(20, 20, 1);
-
                 marker.position.copy(hotspot.positionVector);
                 hotspotGroup.add(marker);
                 hotspotMarkers.push({ hotspot: hotspot, marker: marker });
@@ -486,7 +485,6 @@
         if (window.tourState.isXRActive) {
             updateVRArrowFromLaser();
         } else {
-            // En mode 2D, on réaffiche la flèche au sol
             groundHotspotGroup.visible = true;
             updateMouseArrow();
         }
@@ -670,7 +668,7 @@
             return;
         }
 
-        // 3. Check ground hotspot meshes (ring, arrow, pulse circles)
+        // 3. Check ground hotspot meshes
         var groundMeshes = window.getGroundHotspotMeshes ? window.getGroundHotspotMeshes() : [];
         if (groundMeshes.length) {
             var groundHits = raycaster.intersectObjects(groundMeshes, false);
