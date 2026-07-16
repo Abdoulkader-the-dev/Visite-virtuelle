@@ -1,6 +1,3 @@
-// =============================================================================
-//  hotspots.js  —  Fichier complet avec les corrections pour le mode VR
-// =============================================================================
 (function () {
     'use strict';
 
@@ -8,13 +5,12 @@
     var infoElements = [];
     var groundRaycaster = new THREE.Raycaster();
     var mouseNDC = new THREE.Vector2(0, 0);
-    var GROUND_Y = -1; // modifié de -2 à -1
+    var GROUND_Y = -1;
     var GROUND_HOTSPOT_INNER_RADIUS = 0.12;
     var GROUND_HOTSPOT_OUTER_RADIUS = 0.36;
     var GROUND_HOTSPOT_ARROW_SCALE = 0.38;
     var MIN_FOLLOW_RADIUS = 1.2;
     var MAX_FOLLOW_RADIUS = 8;
-    var MAX_HOTSPOT_DISTANCE = 0.4; // Nouvelle constante pour limiter la distance en VR
     var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
     var groundPoint = new THREE.Vector3();
 
@@ -25,7 +21,7 @@
     var allGroundHotspotMeshes = [];
 
     var pulseCircles = [];
-    var PULSE_CIRCLE_RADIUS = 0.5;
+    var PULSE_CIRCLE_RADIUS = 0.5; // valeur par défaut, sera ajustée en fonction du mode
     var pulseCircleTexture = null;
 
     // --------------------------------------------------------------
@@ -113,7 +109,6 @@
         clearPulseCircles();
     }
 
-    // Texture générique (bleu par défaut, sera teintée par la couleur du matériau)
     function createPulseCircleTexture() {
         if (pulseCircleTexture) {
             return pulseCircleTexture;
@@ -128,20 +123,18 @@
         var cy = size / 2;
         var r = size / 2 - 2;
 
-        // Dégradé en niveaux de gris pour pouvoir le teinter avec la couleur du matériau
         var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        grad.addColorStop(0, 'rgba(255,255,255,0.7)');
-        grad.addColorStop(0.6, 'rgba(255,255,255,0.55)');
-        grad.addColorStop(0.85, 'rgba(255,255,255,0.3)');
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        grad.addColorStop(0, 'rgba(220, 38, 38, 0.7)');
+        grad.addColorStop(0.6, 'rgba(220, 38, 38, 0.55)');
+        grad.addColorStop(0.85, 'rgba(220, 38, 38, 0.3)');
+        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
 
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // Point central blanc
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.85)';
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -205,53 +198,36 @@
         return new THREE.Vector3(px, GROUND_Y, pz);
     }
 
-    // Mise à jour des couleurs uniquement en VR
-    function updatePulseColors(highlightedHotspot) {
-        if (!window.tourState.isXRActive) return; // ← Correction 1 : survol réservé au VR
-
-        // Réinitialise tous les cercles en bleu, puis met en bleu plus soutenu celui qui est survolé
-        pulseCircles.forEach(function (entry) {
-            var mesh = entry.mesh;
-            if (!mesh) return;
-            mesh.material.color.setHex(0x1E90FF);
-        });
-        if (highlightedHotspot) {
-            pulseCircles.forEach(function (entry) {
-                var mesh = entry.mesh;
-                if (!mesh) return;
-                if (mesh.userData.hotspot === highlightedHotspot) {
-                    mesh.material.color.setHex(0x4169E1);
-                }
-            });
-        }
-    }
+    // Pas de fonction updatePulseColors (supprimée)
 
     function createPulseCircles() {
         clearPulseCircles();
+
+        // ← UNIQUE MODIFICATION : taille conditionnelle selon le mode
+        var isVR = window.tourState.isXRActive;
+        var radius = isVR ? 0.5 : 0.25;
 
         var texture = createPulseCircleTexture();
         var hotspots = transitionHotspots();
         var vrGroup = window.tourState.vrGroup;
         if (!vrGroup) return;
 
-        var isVR = window.tourState.isXRActive; // ← Correction 1 : conditionner le style
-
         hotspots.forEach(function (hotspot, index) {
             var groundPos = projectHotspotToGround(hotspot.position);
 
             var geo = new THREE.PlaneGeometry(
-                PULSE_CIRCLE_RADIUS * 2,
-                PULSE_CIRCLE_RADIUS * 2
+                radius * 2,
+                radius * 2
             );
             geo.rotateX(-Math.PI / 2);
 
             var mat = new THREE.MeshBasicMaterial({
                 map: texture,
                 transparent: true,
-                opacity: isVR ? 0.85 : 0.6,      // ← Correction 1 : opacité différente
+                opacity: isVR ? 0.85 : 0.6,
                 side: THREE.DoubleSide,
                 depthWrite: false,
-                color: isVR ? 0x1E90FF : 0xFF0000 // ← Correction 1 : bleu en VR, rouge en 2D
+                color: isVR ? 0x1E90FF : 0xFF0000
             });
 
             var mesh = new THREE.Mesh(geo, mat);
@@ -486,7 +462,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: LASER-DRIVEN ARROW (modifié : détection directe, plus de flèche)
+    //  VR: LASER-DRIVEN ARROW  (flèche masquée en VR, pas de survol)
     // --------------------------------------------------------------
     function getDominantController() {
         var controllers = window.tourState.xrControllers;
@@ -498,36 +474,7 @@
         if (!window.tourState.isXRActive) return;
         // Masquer la flèche au sol en VR
         groundHotspotGroup.visible = false;
-
-        var controller = getDominantController();
-        if (!controller) {
-            updatePulseColors(null);
-            return;
-        }
-
-        var raycaster = window.xrRaycasterFromController ? window.xrRaycasterFromController(controller) : null;
-        if (!raycaster) {
-            updatePulseColors(null);
-            return;
-        }
-
-        // Détection directe sur les cercles pulsants
-        if (allGroundHotspotMeshes.length === 0) {
-            updatePulseColors(null);
-            return;
-        }
-
-        var hits = raycaster.intersectObjects(allGroundHotspotMeshes, false);
-        if (hits.length > 0) {
-            var hitMesh = hits[0].object;
-            var hotspot = hitMesh.userData.hotspot;
-            if (hotspot) {
-                updatePulseColors(hotspot);
-                return;
-            }
-        }
-
-        updatePulseColors(null);
+        // On ne fait pas de survol, on ne change pas de couleur
     }
 
     // --------------------------------------------------------------
@@ -539,7 +486,7 @@
         if (window.tourState.isXRActive) {
             updateVRArrowFromLaser();
         } else {
-            // En mode 2D, on réaffiche la flèche au sol si besoin
+            // En mode 2D, on réaffiche la flèche au sol
             groundHotspotGroup.visible = true;
             updateMouseArrow();
         }

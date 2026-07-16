@@ -1,6 +1,3 @@
-// =============================================================================
-//  vr-ui.js  —  Fichier complet avec les corrections du panneau VR
-// =============================================================================
 (function () {
     'use strict';
 
@@ -30,7 +27,7 @@
 
     var PANEL_WIDTH = 0.35;
     var PANEL_HEIGHT = 0.12;
-    var PANEL_DISTANCE = 0.5; // ← Correction 2 : distance réduite à 0.5
+    var PANEL_DISTANCE = 0.5; // ← UNIQUE MODIFICATION : rapproché à 0.5m
 
     // --------------------------------------------------------------
     //  SUPPORT CHECK
@@ -352,7 +349,7 @@
     }
 
     // --------------------------------------------------------------
-    //  UPDATE VR UI — position fixe en haut à gauche
+    //  UPDATE VR UI  (comportement original : suit la caméra)
     // --------------------------------------------------------------
     function updateVRUI() {
         if (!vrUiGroup || !window.tourState.isXRActive) {
@@ -363,21 +360,18 @@
         var camera = window.tourState.camera;
         if (!camera) return;
 
-        // Récupérer les vecteurs de direction de la caméra
-        var forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-        var right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-        var up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        var forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
 
-        // Position relative : en haut à gauche du champ de vision
-        // x = -0.8 (gauche), y = 0.6 (haut), z = -PANEL_DISTANCE (devant)
-        var offset = new THREE.Vector3()
-            .addScaledVector(right, -0.8)
-            .addScaledVector(up, 0.6)
-            .addScaledVector(forward, -PANEL_DISTANCE);
+        var position = camera.position.clone();
+        position.add(forward.clone().multiplyScalar(PANEL_DISTANCE + 0.2));
 
-        var pos = camera.position.clone().add(offset);
-        vrUiGroup.position.copy(pos);
+        vrUiGroup.position.copy(position);
         vrUiGroup.lookAt(camera.position);
+        // On garde le rotateY(Math.PI) pour que le texte soit lisible
+        vrUiGroup.rotateY(Math.PI);
 
         vrUiGroup.visible = true;
 
@@ -529,6 +523,7 @@
 
         vrInfoPanel.mesh.position.copy(panelPosition);
         vrInfoPanel.mesh.lookAt(camera.position);
+        vrInfoPanel.mesh.rotateY(Math.PI);
     }
 
     function checkVRInfoPanelClose(raycaster) {
