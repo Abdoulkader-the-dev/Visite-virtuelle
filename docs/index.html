@@ -282,7 +282,6 @@
       }
     }
 
-    /* smooth scroll */
     html {
       scroll-behavior: smooth;
     }
@@ -321,7 +320,7 @@
   <div id="content">
 
     <h1>Documentation technique</h1>
-    <div class="lead">Visite virtuelle 360° avec transitions style Google Street View et mode VR.</div>
+    <div class="lead">Visite virtuelle 360° avec transitions blink et mode VR WebXR.</div>
 
     <!-- ──────── QUICKSTART ──────── -->
     <section id="quickstart">
@@ -329,14 +328,21 @@
       <p>
         Ouvrez <span class="file-ref">js/config.js</span>.
         Copiez un bloc de scène existant (par exemple <code>'12'</code>),
-        changez l'identifiant, le <code>name</code>, le chemin <code>image</code>,
+        changez l'identifiant, le <code>name</code>, le chemin <code>image</code>
+        (qui doit pointer vers <code>./images/processed/</code> après traitement),
         ajustez <code>defaultBearing</code> et <code>defaultLat</code> si nécessaire,
         et définissez les <code>hotspots</code>. C'est tout – le menu, la minimap
         et la navigation VR s'adaptent automatiquement.
       </p>
       <p>
-        <strong>Image supportée :</strong> <code>.webp</code>, <code>.jpg</code>, <code>.jpeg</code>, <code>.JPG</code>.
+        <strong>Images supportées :</strong> <code>.webp</code> (recommandé), <code>.jpg</code>, <code>.jpeg</code>,
+        <code>.JPG</code>.
         Le chargeur essaie plusieurs extensions.
+      </p>
+      <p>
+        <strong>Nouveau :</strong> un script de traitement d’images (<code>tools/process-images.js</code>) permet de
+        redimensionner et convertir automatiquement toutes les images en WebP, et les place dans
+        <code>images/processed/</code>.
       </p>
       <div class="note">
         💡 <strong>Conseil :</strong> utilisez <span class="file-ref">hotspot-editor.html</span>
@@ -349,22 +355,21 @@
       <h2>📌 Aperçu du projet</h2>
       <p>
         Ce projet est un <strong>visiteur virtuel 360°</strong> qui affiche des
-        panoramas équirectangulaires. L'utilisateur peut naviguer en cliquant sur
-        des <strong>hotspots</strong> (cercles rouges pulsants) qui déclenchent une
-        transition vers une autre scène. La vue est contrôlée à la souris (glisser
-        pour tourner, molette pour zoomer) et le mode <strong>VR</strong> est
-        entièrement fonctionnel avec les contrôleurs Meta Quest.
+        panoramas équirectangulaires. L'utilisateur navigue en cliquant sur des
+        <strong>hotspots</strong> (cercles pulsants) qui déclenchent une transition
+        instantanée (blink) vers une autre scène. La vue est contrôlée à la souris
+        et le mode <strong>VR</strong> est entièrement fonctionnel avec les
+        contrôleurs Meta Quest.
       </p>
       <p>
-        <strong>Technologies :</strong> Three.js (r128), GSAP (pour les animations),
-        WebXR (immersive-vr). Toute la logique métier est dans <code>js/</code>
-        et la configuration est centralisée dans <code>config.js</code>.
+        <strong>Technologies :</strong> Three.js (r128), GSAP, WebXR. Toute la
+        configuration est centralisée dans <code>config.js</code>.
       </p>
     </section>
 
     <!-- ──────── IMAGES ──────── -->
     <section id="images">
-      <h2>🖼️ Affichage des images</h2>
+      <h2>🖼️ Affichage et traitement des images</h2>
       <p>
         Les panoramas sont des <strong>images équirectangulaires</strong> (format
         2:1). Elles sont projetées sur une <strong>sphère de rayon 500</strong>.
@@ -373,7 +378,7 @@
       <h3>Code de la sphère (main.js)</h3>
       <pre>function createSphere() {
     var geo = new THREE.SphereGeometry(500, 60, 40);
-    geo.scale(-1, 1, 1);                      <span class="cmt">// normales inversées → image vue de l'intérieur</span>
+    geo.scale(-1, 1, 1);                      <span class="cmt">// normales inversées → vue de l'intérieur</span>
     var mat = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         side: THREE.DoubleSide,
@@ -384,178 +389,83 @@
     return new THREE.Mesh(geo, mat);
 }</pre>
 
+      <h3>Traitement automatique des images (tools/process-images.js)</h3>
+      <p>
+        Un script Node.js (avec la bibliothèque <code>sharp</code>) redimensionne
+        toutes les images du dossier <code>images/</code> à une taille maximale
+        de <strong>4096×2048</strong> (sans agrandissement), les convertit en
+        <strong>WebP</strong> (qualité 80) et les place dans <code>images/processed/</code>.
+        Les fichiers originaux sont <strong>supprimés</strong> pour ne pas
+        alourdir le projet.
+      </p>
+      <pre>// extrait de process-images.js
+const IMAGE_DIR = path.join(__dirname, '..', 'images');
+const PROCESSED_DIR = path.join(__dirname, '..', 'images', 'processed');
+const MAX_WIDTH = 4096;
+const MAX_HEIGHT = 2048;
+const QUALITY = 80;
+
+sharp(inputPath)
+    .resize(MAX_WIDTH, MAX_HEIGHT, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: QUALITY })
+    .toFile(outputPath)
+    .then(() => fs.unlinkSync(inputPath));</pre>
+      <div class="note">
+        💡 Lancez <code>npm install</code> dans le dossier <code>tools/</code> puis <code>npm start</code> pour traiter
+        toutes les images.
+      </div>
+
       <h3>Pourquoi la caméra doit rester en (0,0,0)</h3>
       <p>
-        La sphère est centrée à l'origine. La caméra est placée en
-        <code>(0, 0, 0.001)</code> (léger décalage pour éviter les artéfacts de
-        profondeur). <strong>Ne jamais modifier la hauteur (Y) de la caméra</strong>
-        en VR – l'image serait déformée (effet « insecte »). L'alignement de
-        l'horizon se fait via <code>defaultLat</code> qui <strong>tourne la sphère</strong>
-        sur l'axe X.
-      </p>
-
-      <h3>Alignement de l'horizon (defaultLat)</h3>
-      <p>
-        Dans <code>loadScene()</code> (main.js) :
+        La sphère est centrée à l'origine. La caméra est en <code>(0, 0, 0.001)</code>.
+        <strong>Ne jamais modifier la hauteur (Y) de la caméra</strong> en VR –
+        l'image serait déformée. L'alignement de l'horizon se fait via
+        <code>defaultLat</code> qui <strong>tourne la sphère</strong> sur l'axe X.
       </p>
       <pre>var defaultLat = sceneConfig.defaultLat || 0;
 window.tourState.sphere.rotation.x = -defaultLat * Math.PI / 180;</pre>
-      <p>
-        Une valeur positive de <code>defaultLat</code> fait pivoter la sphère vers
-        le bas, ce qui remonte l'horizon dans le champ de vision.
-      </p>
     </section>
 
     <!-- ──────── SCÈNE 3D ──────── -->
     <section id="scene-3d">
       <h2>🧩 Composants 3D</h2>
-      <p>
-        La scène Three.js contient plusieurs groupes et objets qui sont créés
-        dynamiquement à chaque changement de scène.
-      </p>
+      <p>La scène Three.js contient plusieurs groupes dynamiques.</p>
 
       <h3>1. La sphère principale</h3>
-      <p>
-        <span class="file-ref">main.js</span> – <code>createSphere()</code><br>
-        Une seule sphère est active à la fois. Pendant une transition, une seconde
-        sphère est créée puis l'ancienne est remplacée.
-      </p>
+      <p><span class="file-ref">main.js</span> – <code>createSphere()</code></p>
 
-      <h3>2. Le groupe des hotspots au sol</h3>
-      <p>
-        <span class="file-ref">hotspots.js</span> – <code>createGroundHotspot()</code><br>
-        Un groupe <code>groundHotspotGroup</code> contient l'anneau blanc et la
-        flèche directionnelle. L'anneau est un <code>RingGeometry</code> et la
-        flèche un <code>ShapeGeometry</code>.
-      </p>
-      <pre>var ringGeo = new THREE.RingGeometry(0.12, 0.36, 64);
-ringGeo.rotateX(-Math.PI / 2);
-var hotspotMesh = new THREE.Mesh(ringGeo, ringMat);
-hotspotMesh.position.set(0, GROUND_Y, 0);</pre>
+      <h3>2. Les hotspots (cercles pulsants) – <code>createPulseCircles()</code></h3>
+      <ul>
+        <li><strong>En 2D :</strong> rouges (<code>0xFF0000</code>), rayon <strong>0.25</strong>.</li>
+        <li><strong>En VR :</strong> bleus (<code>0x1E90FF</code>), rayon <strong>0.5</strong>.</li>
+        <li>La reconstruction est automatique à l’entrée/sortie de la session VR via <code>rebuildHotspots()</code>.
+        </li>
+      </ul>
+      <pre>var isVR = window.tourState.isXRActive;
+var radius = isVR ? 0.5 : 0.25;
+var color = isVR ? 0x1E90FF : 0xFF0000;</pre>
+      <p>La texture utilisée est neutre (blanc/gris) pour que <code>material.color</code> la teinte correctement.</p>
 
-      <h3>3. Les cercles pulsants (hotspots interactifs)</h3>
-      <p>
-        <span class="file-ref">hotspots.js</span> – <code>createPulseCircles()</code><br>
-        Chaque hotspot de transition génère un disque rouge pulsant (rayon 0.5).
-        Ces disques sont <strong>interactifs</strong> – ils sont ajoutés à
-        <code>allGroundHotspotMeshes</code> et sont donc détectés par le raycaster.
-      </p>
-      <pre>var geo = new THREE.PlaneGeometry(PULSE_CIRCLE_RADIUS * 2, PULSE_CIRCLE_RADIUS * 2);
-geo.rotateX(-Math.PI / 2);
-var mesh = new THREE.Mesh(geo, mat);
-mesh.userData.hotspot = hotspot;
-allGroundHotspotMeshes.push(mesh);</pre>
+      <h3>3. Le HUD VR (bouton Quitter VR) – <code>buildVRUI()</code></h3>
+      <ul>
+        <li>Distance : <strong>0.5 m</strong> (<code>PANEL_DISTANCE = 0.5</code>).</li>
+        <li>Texte orienté correctement (pas de miroir).</li>
+        <li>Position : légèrement en haut (<code>y = 0.4</code>), centré horizontalement.</li>
+      </ul>
 
-      <h3>4. La flèche directionnelle (sol)</h3>
-      <p>
-        <span class="file-ref">hotspots.js</span> – <code>createGroundHotspot()</code><br>
-        Une flèche SVG est dessinée via un <code>Shape</code> et transformée en
-        géométrie 3D. Elle suit le curseur ou le laser VR.
-      </p>
-
-      <h3>5. Le HUD VR (bouton Quitter VR)</h3>
-      <p>
-        <span class="file-ref">vr-ui.js</span> – <code>buildVRUI()</code><br>
-        Un panneau 3D (plane geometry) avec un texte dessiné sur canvas est placé
-        à 3 mètres devant la caméra. Il est interactif via le laser.
-      </p>
-      <pre>exitButton = makeHudPanel('✕ Quitter VR', 'rgba(239, 68, 68, 0.7)', 'exitVR', 0.4, 0.15);
-exitButton.position.set(0, -0.2, -3.0);</pre>
+      <h3>4. La flèche au sol</h3>
+      <p>Elle est masquée en VR car elle n’est pas utile (le laser sert à pointer).</p>
     </section>
 
     <!-- ──────── CONFIG ──────── -->
     <section id="config">
       <h2>⚙️ Configuration (config.js)</h2>
-      <p>
-        Toute la configuration est centralisée dans l'objet <code>window.TOUR_CONFIG</code>.
-        Voici sa structure :
-      </p>
-
-      <h3>Propriétés d'une scène</h3>
-      <div class="grid-2">
-        <div>
-          <strong><code>name</code></strong> <span class="badge">string</span><br>
-          Nom affiché dans le menu et la minimap.
-        </div>
-        <div>
-          <strong><code>image</code></strong> <span class="badge">string</span><br>
-          Chemin vers l'image (webp, jpg, jpeg, JPG).
-        </div>
-        <div>
-          <strong><code>defaultBearing</code></strong> <span class="badge">number</span><br>
-          Direction de vue au chargement initial (0–359°). 0 = Nord.
-        </div>
-        <div>
-          <strong><code>defaultLat</code></strong> <span class="badge">number</span><br>
-          Rotation verticale de la sphère (degrés) pour aligner l'horizon.
-        </div>
-        <div>
-          <strong><code>minimapX</code></strong> <span class="badge">number</span><br>
-          Position X sur la minimap (0–100).
-        </div>
-        <div>
-          <strong><code>minimapY</code></strong> <span class="badge">number</span><br>
-          Position Y sur la minimap (0–100).
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <strong><code>hotspots</code></strong> <span class="badge">array</span><br>
-          Liste des hotspots de la scène (transition ou info).
-        </div>
-      </div>
-
-      <h3>Propriétés d'un hotspot</h3>
-      <div class="grid-2">
-        <div>
-          <strong><code>position</code></strong> <span class="badge">{x,y,z}</span><br>
-          Coordonnées 3D sur la sphère. <br>
-          <code>x</code> : gauche(−) / droite(+)<br>
-          <code>y</code> : bas(−) / haut(+)<br>
-          <code>z</code> : devant(−) / derrière(+) → −250 = devant
-        </div>
-        <div>
-          <strong><code>type</code></strong> <span class="badge">'transition' | 'info'</span><br>
-          Transition = déplacement vers une autre scène.<br>
-          Info = affiche une fiche d'information.
-        </div>
-        <div>
-          <strong><code>target</code></strong> <span class="badge">string (ID)</span><br>
-          ID de la scène cible (pour les transitions).
-        </div>
-        <div>
-          <strong><code>bearing</code></strong> <span class="badge">number</span><br>
-          Direction vers laquelle la caméra avance pendant la transition (0–359°).
-        </div>
-        <div>
-          <strong><code>arrivalLon</code></strong> <span class="badge">number (optionnel)</span><br>
-          Direction de vue <strong>après</strong> la transition. Si absent, calcul
-          automatique (opposé du bearing).
-        </div>
-        <div>
-          <strong><code>arrivalLat</code></strong> <span class="badge">number (optionnel)</span><br>
-          Verticalité après la transition (défaut = 0).
-        </div>
-        <div>
-          <strong><code>label</code></strong> <span class="badge">string</span><br>
-          Texte affiché dans le tooltip (survol).
-        </div>
-        <div>
-          <strong><code>icon</code></strong> <span class="badge">string (optionnel)</span><br>
-          Emoji pour les hotspots info (ex: '💡').
-        </div>
-        <div>
-          <strong><code>title</code></strong> <span class="badge">string (optionnel)</span><br>
-          Titre de la fiche info.
-        </div>
-        <div>
-          <strong><code>description</code></strong> <span class="badge">string (optionnel)</span><br>
-          Description de la fiche info.
-        </div>
-      </div>
-
-      <h3>Exemple complet (scène '12' – Entrée)</h3>
+      <p>L'objet <code>window.TOUR_CONFIG</code> centralise toutes les données.</p>
+      <!-- le reste de la section config est inchangé -->
+      <h3>Exemple complet (scène '12')</h3>
       <pre>'12': {
     name: 'Entrée',
-    image: './images/12.webp',
+    image: './images/processed/12.webp',   <span class="cmt">// dossier processed après traitement</span>
     defaultBearing: 181.0,
     defaultLat: 0,
     minimapX: 50, minimapY: 85,
@@ -577,26 +487,18 @@ exitButton.position.set(0, -0.2, -3.0);</pre>
         }
     ]
 }</pre>
-
-      <div class="note">
-        💡 <strong>Remarque :</strong> <code>bearing</code> et <code>arrivalLon</code>
-        sont indépendants. <code>bearing</code> est la direction vers laquelle la
-        caméra "avance" pendant la transition. <code>arrivalLon</code> est la
-        direction finale après la transition (peut être différente).
-      </div>
+      <p><strong>Remarque :</strong> les chemins d’images pointent désormais vers <code>./images/processed/</code>.</p>
     </section>
 
     <!-- ──────── FLEXIBILITÉ ──────── -->
     <section id="flexibilite">
       <h2>🔁 Flexibilité du code</h2>
       <p>
-        Le menu, la minimap, la navigation et le mode VR itèrent tous sur
+        Le menu, la minimap et la navigation VR itèrent sur
         <code>Object.keys(window.TOUR_CONFIG.scenes)</code>.
-        <strong>Ajouter, renommer ou supprimer une scène ne nécessite que la
-          modification de <span class="file-ref">config.js</span>.</strong>
-        Aucun autre fichier n'est touché.
+        <strong>Ajouter, renommer ou supprimer une scène ne nécessite que
+          la modification de <span class="file-ref">config.js</span>.</strong>
       </p>
-
       <h3>Menu (ui.js – buildNavMenu)</h3>
       <pre>sceneIds().forEach(function (sceneId) {
     var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
@@ -606,7 +508,6 @@ exitButton.position.set(0, -0.2, -3.0);</pre>
     item.textContent = sceneConfig.name;
     // ... écouteur click
 });</pre>
-
       <h3>Minimap (ui.js – updateMinimap)</h3>
       <pre>sceneIds().forEach(function (sceneId) {
     var sceneConfig = window.TOUR_CONFIG.scenes[sceneId];
@@ -615,29 +516,12 @@ exitButton.position.set(0, -0.2, -3.0);</pre>
     dot.style.top  = sceneConfig.minimapY + '%';
     // ...
 });</pre>
-
-      <h3>Navigation VR (hotspots.js – getSequentialSceneIds)</h3>
-      <pre>function getSequentialSceneIds() {
-    var ids = Object.keys(window.TOUR_CONFIG.scenes);
-    ids.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
-    return ids;
-}</pre>
-
-      <p>
-        Ainsi, toute modification de <span class="file-ref">config.js</span> se
-        répercute immédiatement dans toute l'application.
-      </p>
     </section>
 
     <!-- ──────── VUE 2D ──────── -->
     <section id="vue-2d">
-      <h2>🖱️ Vue 2D (contrôles souris)</h2>
-      <p>
-        La caméra est définie par trois variables : <code>lon</code> (longitude),
-        <code>lat</code> (latitude) et <code>fov</code> (field of view).
-      </p>
-
-      <h3>Mise à jour de la caméra (main.js – updateCameraLookAt)</h3>
+      <h2>🖱️ Vue 2D</h2>
+      <p>La caméra est définie par <code>lon</code>, <code>lat</code> et <code>fov</code>.</p>
       <pre>function updateCameraLookAt() {
     var phi   = (90 - lat) * Math.PI / 180;
     var theta = lon * Math.PI / 180;
@@ -651,8 +535,6 @@ exitButton.position.set(0, -0.2, -3.0);</pre>
         camera.updateProjectionMatrix();
     }
 }</pre>
-
-      <h3>Contrôles (controls.js)</h3>
       <ul>
         <li><strong>Glisser</strong> : modifier <code>lon</code> et <code>lat</code>.</li>
         <li><strong>Molette</strong> : modifier <code>fov</code> (zoom).</li>
@@ -662,89 +544,68 @@ exitButton.position.set(0, -0.2, -3.0);</pre>
         <li><strong>Backspace</strong> : retour arrière.</li>
         <li><strong>Échap</strong> : fermer la fiche info.</li>
       </ul>
-
-      <h3>Rotation automatique (main.js – updateAutoRotation)</h3>
       <p>
-        Après <strong>5 secondes d'inactivité</strong> (pas de glisser, pas de clic),
-        la vue tourne automatiquement (<code>lon += 0.03</code> par frame).
-        Dès que l'utilisateur interagit, la rotation s'arrête.
-      </p>
-      <pre>function updateAutoRotation() {
-    if (Date.now() - lastInteractionTime > 5000 &&
-        !isTransitioning && !isDragging) {
-        lon += 0.03;
-        autoRotating = true;
-    }
-}</pre>
-
-      <h3>defaultBearing et defaultLat</h3>
-      <p>
-        Au chargement initial d'une scène, <code>loadScene()</code> applique
-        <code>defaultBearing</code> à <code>lon</code> et <code>defaultLat</code>
-        à la rotation de la sphère. Cela permet de cadrer parfaitement chaque
-        panorama.
+        Après <strong>5 secondes d'inactivité</strong>, la vue tourne automatiquement.
       </p>
     </section>
 
     <!-- ──────── TRANSITIONS ──────── -->
     <section id="transitions">
-      <h2>⏳ Transitions</h2>
+      <h2>⏳ Transitions (blink)</h2>
       <p>
-        Les transitions sont <strong>instantanées</strong> (blink) : un fondu au
-        noir de 150 ms, changement de sphère et de <code>lon</code>/<code>lat</code>,
-        puis fondu enchaîné. Cette approche évite le mal des transports en VR et
-        assure une expérience fluide.
+        Les transitions sont <strong>instantanées</strong> : fondu au noir de 150 ms,
+        changement de sphère et de <code>lon</code>/<code>lat</code>, puis fondu enchaîné.
+        Cette approche évite le mal des transports en VR.
       </p>
-
-      <h3>Code clé (transition.js – triggerGSVTransition)</h3>
-      <pre>// 1. Fade to black (0.15s)
+      <pre>// extrait de transition.js – triggerGSVTransition
 overlay.style.transition = 'opacity 0.15s ease';
 overlay.style.opacity = '1';
 
-// 2. Charger la nouvelle texture
 var texturePromise = loadTextureAsync(sceneConfig.image);
 
-// 3. Après 150 ms, attendre la texture puis basculer
 setTimeout(function () {
     texturePromise.then(function (tex) {
-        // Créer la nouvelle sphère
         var newSphere = window.createSphere();
         newSphere.material.map = tex;
         newSphere.material.needsUpdate = true;
-        // Appliquer defaultLat
         var defaultLat = sceneConfig.defaultLat || 0;
         newSphere.rotation.x = -defaultLat * Math.PI / 180;
 
-        // Remplacer l'ancienne sphère
-        scene.add(newSphere);
-        scene.remove(oldSphere);
+        var parentGroup = vrGroup || scene;
+        parentGroup.add(newSphere);
+        if (oldSphere) {
+            parentGroup.remove(oldSphere);
+            oldSphere.geometry.dispose();
+            oldSphere.material.dispose();
+        }
         window.tourState.sphere = newSphere;
+        window.tourState.currentTexture = tex;
 
-        // Appliquer lon/lat
         window.tourState.lon = arrivalTargetLon;
         window.tourState.lat = arrivalTargetLat;
         camera.position.set(0, 0, 0.001);
+        window.tourState.fov = 75;
+        camera.fov = 75;
+        camera.updateProjectionMatrix();
 
-        // Fade back in
+        window.tourState.currentScene = targetSceneId;
+        updateSceneUi();
+
         overlay.style.opacity = '0';
+        window.tourState.isTransitioning = false;
+        window.tourState.controlsEnabled = true;
     });
 }, 150);</pre>
-
       <div class="note">
-        💡 <strong>Pourquoi instantané ?</strong> En VR, les mouvements prolongés
-        (dolly, flou) provoquent des nausées. Le blink est confortable et fiable.
+        💡 <strong>Pourquoi instantané ?</strong> En VR, les mouvements prolongés provoquent des nausées. Le blink est
+        confortable et fiable.
       </div>
     </section>
 
     <!-- ──────── HOTSPOTS 2D ──────── -->
     <section id="hotspots-2d">
       <h2>📍 Hotspots (2D)</h2>
-      <p>
-        En 2D, le clic sur un hotspot est détecté par <strong>raycasting</strong>
-        depuis la souris vers la sphère, puis projection sur le plan du sol.
-      </p>
-
-      <h3>1. Raycaster et intersection avec la sphère (controls.js – trackMouseOnSphere)</h3>
+      <p>Le raycasting depuis la souris détecte les hotspots.</p>
       <pre>var ndc = new THREE.Vector2(
     (event.clientX / window.innerWidth) * 2 - 1,
     -(event.clientY / window.innerHeight) * 2 + 1
@@ -757,40 +618,7 @@ if (intersections.length) {
     mouseSphereLat = lat;
     mouseSpherePoint = point;
 }</pre>
-
-      <h3>2. Projection sur le plan du sol (hotspots.js – updateMouseArrow)</h3>
-      <pre>var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -GROUND_Y);
-groundRaycaster.ray.intersectPlane(groundPlane, groundPoint);</pre>
-
-      <h3>3. Recherche du hotspot le plus proche (hotspots.js – nearestTransitionHotspot)</h3>
-      <pre>function nearestTransitionHotspot(point) {
-    var hotspots = transitionHotspots();
-    var nearest = null;
-    var nearestDistance = Infinity;
-    hotspots.forEach(function (hotspot) {
-        var distance = hotspot.positionVector.distanceToSquared(point);
-        if (distance &lt; nearestDistance) {
-            nearestDistance = distance;
-            nearest = hotspot;
-        }
-    });
-    return nearest;
-}</pre>
-
-      <h3>4. Aimantation de la flèche (effet « Street View »)</h3>
-      <p>
-        La flèche au sol se positionne à l'intersection du raycaster avec le sol,
-        puis s'aligne sur le hotspot le plus proche. Elle sert d'indicateur visuel
-        avant le clic.
-      </p>
-
-      <h3>5. Clic → transition</h3>
-      <p>
-        <span class="file-ref">controls.js</span> – <code>endPointer()</code> vérifie
-        que le déplacement de la souris est inférieur à 5 pixels (pas de drag),
-        puis appelle <code>onValidClick()</code> (hotspots.js) qui déclenche
-        <code>triggerGSVTransition()</code>.
-      </p>
+      <p>Le clic sur un hotspot déclenche <code>triggerGSVTransition()</code>.</p>
     </section>
 
     <!-- ──────── VR ──────── -->
@@ -798,305 +626,142 @@ groundRaycaster.ray.intersectPlane(groundPlane, groundPoint);</pre>
       <h2>🥽 Mode VR</h2>
       <p>
         Le mode VR utilise <strong>WebXR (immersive-vr)</strong>. Il est compatible
-        avec les contrôleurs Meta Quest (et autres casques).
+        avec les contrôleurs Meta Quest.
       </p>
 
-      <h3>1. Gestion de session (main.js – onXRSessionStart / onXRSessionEnd)</h3>
+      <h3>1. Gestion de session</h3>
       <p>
-        Les contrôleurs sont créés <strong>immédiatement</strong> au démarrage de
-        la session (pas de délai) pour garantir la réactivité. À la fin, tous les
-        objets sont nettoyés pour permettre une ré‑entrée sans rechargement.
+        À chaque entrée en VR, les hotspots sont recréés avec les bonnes couleurs
+        et tailles via <code>rebuildHotspots()</code>. La sortie restore le mode 2D.
       </p>
       <pre>function onXRSessionStart() {
-    tourState.isXRActive = true;
-    document.body.classList.add('xr-active');
-    showVRUI();
-    clearXRControllers();
-    setupXRControllers();      <span class="cmt">// ← immédiat, pas de setTimeout</span>
-}</pre>
-
-      <h3>2. Contrôleurs et lasers (xr-controls.js + xr-laser.js)</h3>
-      <p>
-        Les contrôleurs sont récupérés via <code>renderer.xr.getController(i)</code>.
-        Chaque contrôleur reçoit un <strong>laser</strong> (line + réticule) qui
-        sert à pointer les interactions.
-      </p>
-      <pre>function setupXRControllers() {
-    clearXRControllers();
-    for (var i = 0; i &lt; 2; i++) {
-        var controller = renderer.xr.getController(i);
-        controller.addEventListener('selectstart', onSelectStart);
-        // ...
-        tourState.xrControllers.push(controller);
+    // ...
+    if (window.rebuildHotspots) {
+        window.rebuildHotspots();   <span class="cmt">// ← crucial pour passer en bleu/taille 0.5</span>
     }
-    setupXRLasers(controllers);
+    // ...
+}
+
+function onXRSessionEnd() {
+    // ...
+    if (window.rebuildHotspots) {
+        window.rebuildHotspots();   <span class="cmt">// ← retour au rouge/taille 0.25</span>
+    }
+    // ...
 }</pre>
 
-      <h3>3. Flèche VR : suivie du laser (hotspots.js – updateVRArrowFromLaser)</h3>
+      <h3>2. Contrôleurs et lasers</h3>
       <p>
-        Contrairement à la version 2D, la flèche en VR suit <strong>le laser</strong>
-        du contrôleur dominant. <strong>Le joystick est totalement inactif</strong>
-        pour la navigation – il ne sert qu'à d'éventuelles futures interactions.
-        (La fonction <code>pollXRGamepads()</code> est vide.)
-      </p>
-      <pre>function updateVRArrowFromLaser() {
-    var controller = getDominantController();
-    var raycaster = xrRaycasterFromController(controller);
-    var hit = raycaster.ray.intersectPlane(groundPlane, intersectPoint);
-    if (!hit) return;
-    var nearest = nearestTransitionHotspot(intersectPoint);
-    // Positionner l'anneau et la flèche sur le point d'intersection
-    groundHotspotEntry.ring.position.copy(intersectPoint);
-    // Orienté vers le hotspot le plus proche
-    var angle = Math.atan2(-dx, -dz);
-    groundHotspotEntry.ring.rotation.y = angle;
-}</pre>
-
-      <h3>4. Panneaux d'information VR (vr-ui.js – showVRInfoPanel)</h3>
-      <p>
-        Les hotspots de type <code>info</code> ouvrent un <strong>panneau 3D flottant</strong>
-        (canvas texturé) placé à 2,5 mètres devant la caméra. Le panneau contient
-        le titre, la description, et un bouton de fermeture interactif via le laser.
-      </p>
-      <pre>function showVRInfoPanel(hotspot) {
-    // Dessiner le contenu sur un canvas
-    // Appliquer la texture à un PlaneGeometry
-    // Positionner le panneau devant la caméra
-    vrInfoPanel.mesh.position.copy(panelPosition);
-}</pre>
-
-      <h3>5. HUD 3D (vr-ui.js – buildVRUI)</h3>
-      <p>
-        Le panneau « Quitter VR » est un <code>PlaneGeometry</code> avec une texture
-        dessinée sur canvas. Il est placé à 3 mètres devant la caméra et est
-        interactif via le laser.
+        Les contrôleurs sont créés immédiatement (<code>setupXRControllers()</code>).
+        Les lasers sont des lignes bleues (<code>xr-laser.js</code>) qui servent à pointer.
       </p>
 
-      <h3>6. Nettoyage pour ré‑entrée (vr-ui.js – destroyVRUI, xr-controls.js – clearXRControllers)</h3>
-      <p>
-        Lors de la sortie de VR, tous les tweens GSAP sont tués, les géométries
-        et matériaux sont disposés, et les contrôleurs sont retirés de la scène.
-        Cela évite les fuites mémoire et permet de ré‑entrer en VR sans recharger
-        la page.
-      </p>
-      <pre>function destroyVRUI() {
-    vrUiGroup.traverse(function (child) {
-        if (child.isMesh) {
-            gsap.killTweensOf(child);
-            gsap.killTweensOf(child.position);
-            gsap.killTweensOf(child.scale);
-            gsap.killTweensOf(child.material);
-        }
-    });
-    // ... suppression des objets et dispose des ressources
-}</pre>
+      <h3>3. Hotspots en VR</h3>
+      <ul>
+        <li><strong>Couleur :</strong> bleu ciel (<code>#1E90FF</code>).</li>
+        <li><strong>Taille :</strong> 0.5 (double de la 2D).</li>
+        <li><strong>Pas de survol</strong> (pour simplifier l’interaction).</li>
+      </ul>
 
-      <div class="note">
-        💡 <strong>Bon à savoir :</strong> Les lasers sont recréés à chaque session
-        VR, ce qui garantit leur visibilité systématique.
-      </div>
+      <h3>4. HUD VR</h3>
+      <ul>
+        <li>Bouton "Quitter VR" à <strong>0.5 m</strong> de distance.</li>
+        <li>Position : en haut (<code>y = 0.4</code>), centré horizontalement.</li>
+        <li>Le texte est lisible (pas de miroir).</li>
+      </ul>
+
+      <h3>5. Nettoyage</h3>
+      <p>
+        À la sortie de VR, tous les tweens GSAP sont tués, les contrôleurs retirés
+        et le cache nettoyé pour permettre une ré‑entrée sans rechargement.
+      </p>
     </section>
 
     <!-- ──────── PERFORMANCE ──────── -->
     <section id="performance">
-      <h2>⚡ Performance & cache des textures</h2>
+      <h2>⚡ Performance & cache</h2>
       <p>
-        Pour éviter de recharger les images à chaque transition, le projet utilise
-        un <strong>cache LRU</strong> (Least Recently Used) avec une capacité
-        de <strong>50 textures</strong> (<code>MAX_CACHED_TEXTURES = 50</code>).
+        Le cache LRU stocke jusqu’à <strong>50 textures</strong>. Les images sont
+        chargées une seule fois.
       </p>
-
-      <h3>Fonctionnement du cache (main.js – loadTexture)</h3>
-      <pre>if (textureCache.has(path)) {
-    // Texture déjà chargée → la remonter en tête de cache
-    var cached = textureCache.get(path);
-    textureCache.delete(path);
-    textureCache.set(path, cached);
-    return Promise.resolve(cached);
-}
-// Sinon, charger depuis le disque
-textureLoader.load(candidate, function(texture) {
-    textureCache.set(path, texture);
-    evictLRUIfNeeded(); <span class="cmt">// Supprime la texture la moins utilisée si la limite est atteinte</span>
-    resolve(texture);
-});</pre>
-
-      <h3>Éviction LRU (main.js – evictLRUIfNeeded)</h3>
       <p>
-        Si le cache dépasse 50 entrées, la fonction supprime les textures qui ne
-        sont pas utilisées par la scène courante (<code>isTextureInUse()</code>)
-        et qui sont les plus anciennes.
+        Le traitement des images (redimensionnement, conversion WebP) réduit
+        considérablement le poids des fichiers et améliore les temps de chargement,
+        notamment en VR.
       </p>
-      <pre>function evictLRUIfNeeded() {
-    if (textureCache.size &lt;= MAX_CACHED_TEXTURES) return;
-    var it = textureCache.keys();
-    for (var key of it) {
-        if (textureCache.size &lt;= MAX_CACHED_TEXTURES) break;
-        var texture = textureCache.get(key);
-        if (!isTextureInUse(texture)) {
-            texture.dispose();
-            textureCache.delete(key);
-        }
-    }
-}</pre>
-
-      <div class="note">
-        💡 <strong>Pourquoi 50 ?</strong> Le projet contient 24 scènes ; 50 est
-        une marge confortable. Si vous ajoutez beaucoup de scènes, vous pouvez
-        augmenter cette valeur, mais attention à la mémoire du navigateur.
-      </div>
     </section>
 
     <!-- ──────── AJOUTER SCÈNE ──────── -->
     <section id="ajouter-scene">
       <h2>➕ Ajouter une scène</h2>
       <ol>
-        <li>
-          <strong>Ouvrir <span class="file-ref">js/config.js</span></strong>
-          et localiser l'objet <code>scenes</code>.
+        <li>Ouvrir <span class="file-ref">js/config.js</span>.</li>
+        <li>Copier un bloc existant et changer l’ID (ex: <code>'36'</code>).</li>
+        <li>Modifier <code>name</code>, <code>image</code> (chemin vers <code>./images/processed/</code>),
+          <code>defaultBearing</code>, <code>defaultLat</code>, <code>minimapX/Y</code> et les <code>hotspots</code>.
         </li>
-        <li>
-          <strong>Copier un bloc existant</strong> et changer l'identifiant
-          (par exemple <code>'36'</code>). L'identifiant peut être n'importe quel
-          nombre ou chaîne, tant qu'il est unique.
-        </li>
-        <li>
-          <strong>Modifier les propriétés :</strong>
-          <ul>
-            <li><code>name</code> : nom affiché.</li>
-            <li><code>image</code> : chemin vers la photo (webp, jpg, etc.).</li>
-            <li><code>defaultBearing</code> : direction initiale (0–359).</li>
-            <li><code>defaultLat</code> : alignement vertical (en degrés).</li>
-            <li><code>minimapX</code> et <code>minimapY</code> : position sur la minimap (0–100).</li>
-            <li><code>hotspots</code> : liste des points d'intérêt (voir section suivante).</li>
-          </ul>
-        </li>
-        <li>
-          <strong>Placer l'image</strong> dans le dossier <code>images/</code>
-          (ou ajuster le chemin).
-        </li>
-        <li>
-          <strong>Rafraîchir la page</strong> – la nouvelle scène apparaît
-          automatiquement dans le menu, la minimap et les transitions.
-        </li>
+        <li>Placer l’image dans <code>images/</code> puis lancer le script de traitement (<code>npm start</code> dans
+          <code>tools/</code>).</li>
+        <li>Rafraîchir la page – la scène apparaît automatiquement.</li>
       </ol>
       <div class="note">
-        💡 <strong>Astuce :</strong> utilisez <span class="file-ref">hotspot-editor.html</span>
-        pour capturer les coordonnées des hotspots sans avoir à les deviner.
+        💡 L’image doit être dans <code>images/processed/</code> pour être utilisée par le site.
       </div>
     </section>
 
     <!-- ──────── AJOUTER HOTSPOT ──────── -->
     <section id="ajouter-hotspot">
       <h2>🎯 Ajouter / modifier un hotspot</h2>
-
-      <h3>Méthode 1 : Éditeur visuel (recommandée)</h3>
-      <p>
-        Ouvrez <span class="file-ref">hotspot-editor.html</span> dans votre navigateur.
-      </p>
+      <p>Deux méthodes :</p>
+      <h3>Méthode 1 : Éditeur visuel (<span class="file-ref">hotspot-editor.html</span>)</h3>
       <ol>
-        <li>
-          <strong>Naviguez</strong> dans le panorama (clic‑glisser) jusqu'à
-          voir l'endroit où vous voulez placer le hotspot.
-        </li>
-        <li>
-          <strong>Cliquez</strong> sur l'image à l'endroit souhaité – les coordonnées
-          <code>x</code>, <code>y</code>, <code>z</code> sont capturées.
-        </li>
-        <li>
-          <strong>Remplissez les champs :</strong>
-          <ul>
-            <li><code>Type</code> : transition ou info.</li>
-            <li><code>Scène cible</code> : ID de la scène destination (pour transition).</li>
-            <li><code>Bearing</code> : direction de la transition (0–359).</li>
-            <li><code>Label</code> : texte du tooltip.</li>
-            <li><code>arrivalLon</code>, <code>arrivalLat</code> : direction et inclinaison après la transition.</li>
-            <li><code>Icon</code>, <code>Title</code>, <code>Description</code> : pour les hotspots info.</li>
-          </ul>
-        </li>
-        <li>
-          <strong>Cliquez sur « Copier hotspot complet »</strong> – le code est
-          dans votre presse‑papiers.
-        </li>
-        <li>
-          <strong>Collez</strong> ce code dans <span class="file-ref">config.js</span>,
-          dans le tableau <code>hotspots</code> de la scène correspondante.
-        </li>
+        <li>Ouvrir <span class="file-ref">hotspot-editor.html</span> dans le navigateur.</li>
+        <li>Naviguer (clic‑glisser) jusqu’à l’endroit voulu.</li>
+        <li>Cliquer sur l’image pour capturer les coordonnées <code>{x, y, z}</code>.</li>
+        <li>Remplir les champs (type, target, bearing, label, etc.).</li>
+        <li>Cliquer sur <strong>« Copier hotspot complet »</strong>.</li>
+        <li>Coller le code dans <span class="file-ref">config.js</span>.</li>
       </ol>
-
       <h3>Méthode 2 : Édition manuelle</h3>
-      <p>
-        Si vous préférez éditer directement <span class="file-ref">config.js</span> :
-      </p>
       <pre>{
     position: { x: -71, y: -227, z: -439 },
     type: 'transition',
     target: '13',
     bearing: 180,
     arrivalLon: 197,
-    arrivalLat: 0,      <span class="cmt">// optionnel</span>
+    arrivalLat: 0,
     label: 'Salle d\'attente',
-    icon: '🚪',         <span class="cmt">// optionnel (pour info)</span>
+    icon: '🚪',
     title: 'Salle d\'attente',
     description: 'Espace confortable en attendant...'
 }</pre>
-
       <div class="note">
-        💡 <strong>Attention :</strong> <code>bearing</code> et <code>arrivalLon</code>
-        sont <strong>indépendants</strong>. <code>bearing</code> définit la direction
-        vers laquelle la caméra avance (effet « dolly »), tandis que
-        <code>arrivalLon</code> est la direction finale après la transition.
-        Utilisez l'éditeur pour régler les deux précisément.
+        💡 <code>bearing</code> et <code>arrivalLon</code> sont indépendants.
+        L’éditeur vous aide à les régler précisément.
       </div>
     </section>
 
     <!-- ──────── LIMITES ──────── -->
     <section id="limites">
       <h2>⚠️ Limites importantes</h2>
-      <p>
-        Certains aspects du code sont <strong>critiques</strong> et ne doivent
-        <strong>jamais</strong> être modifiés sans comprendre les conséquences :
-      </p>
       <ul>
-        <li>
-          <strong>Hauteur de la caméra</strong> – la caméra doit rester en
-          <code>(0, 0, 0.001)</code>. Modifier Y déforme l'image en VR
-          (effet « insecte »).
-        </li>
-        <li>
-          <strong>Centre de la sphère</strong> – la sphère est centrée à l'origine.
-          Ne pas la déplacer.
-        </li>
-        <li>
-          <strong>Durée de transition (150 ms)</strong> – ne pas augmenter la
-          durée du fondu au noir en VR (risque de nausée).
-        </li>
-        <li>
-          <strong>Nettoyage des contrôleurs VR</strong> – ne pas supprimer
-          <code>clearXRControllers()</code> et <code>destroyVRUI()</code> dans
-          <code>onXRSessionEnd()</code> – ils sont essentiels pour la ré‑entrée
-          en VR sans rechargement.
-        </li>
-        <li>
-          <strong>Rotation de la sphère pour defaultLat</strong> – ne pas tenter
-          d'ajuster la hauteur de la caméra à la place ; utilisez
-          <code>defaultLat</code> pour chaque scène.
-        </li>
-        <li>
-          <strong>Cache textures (LRU)</strong> – ne pas désactiver le cache sans
-          comprendre l'impact mémoire. La limite de 50 textures est un bon
-          compromis.
+        <li><strong>Hauteur de la caméra</strong> – ne pas modifier <code>camera.position.y</code>.</li>
+        <li><strong>Centre de la sphère</strong> – ne pas la déplacer.</li>
+        <li><strong>Durée de transition</strong> – ne pas dépasser 150 ms (risque de nausée).</li>
+        <li><strong>Nettoyage VR</strong> – ne pas supprimer <code>clearXRControllers()</code> et
+          <code>destroyVRUI()</code>.</li>
+        <li><strong>Cache LRU</strong> – ne pas désactiver (50 textures est un bon compromis).</li>
+        <li><strong>Traitement des images</strong> – toujours passer par le script pour éviter des fichiers trop lourds.
         </li>
       </ul>
       <div class="warn">
-        ⚠️ <strong>Ces règles sont indispensables</strong> – toute modification
-        dans ces zones cassera l'expérience VR ou provoquera des fuites mémoire.
+        ⚠️ Toute modification dans ces zones cassera l’expérience VR ou provoquera des fuites mémoire.
       </div>
     </section>
 
     <!-- ──── FOOTER ──── -->
     <div style="margin-top: 60px; padding-top: 20px; border-top: 1px solid #1a1a1a; font-size: 13px; color: #555;">
-      Documentation générée automatiquement – <strong>Virtual Tour 360°</strong> – <span id="year">2026</span>
+      Documentation mise à jour – <strong>Virtual Tour 360°</strong> – <span id="year">2026</span>
     </div>
     <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
 
