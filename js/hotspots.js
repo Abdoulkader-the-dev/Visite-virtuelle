@@ -108,7 +108,7 @@
         clearPulseCircles();
     }
 
-    // Texture NEUTRE (blanc/gris) pour que material.color la teinte
+    // Texture NEUTRE (blanc/gris) pour que material.color la teinte correctement
     function createPulseCircleTexture() {
         if (pulseCircleTexture) {
             return pulseCircleTexture;
@@ -123,7 +123,6 @@
         var cy = size / 2;
         var r = size / 2 - 2;
 
-        // Dégradé blanc → gris transparent
         var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
         grad.addColorStop(0, 'rgba(255,255,255,0.85)');
         grad.addColorStop(0.6, 'rgba(255,255,255,0.6)');
@@ -135,7 +134,6 @@
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // Point central blanc
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
@@ -201,14 +199,14 @@
     }
 
     // --------------------------------------------------------------
-    //  CREATE PULSE CIRCLES  (correction : texture neutre, taille + couleur conditionnelles)
+    //  CREATE PULSE CIRCLES  (couleur + taille selon le mode)
     // --------------------------------------------------------------
     function createPulseCircles() {
         clearPulseCircles();
 
         var isVR = window.tourState.isXRActive;
-        var radius = isVR ? 0.5 : 0.25;        // ← taille : 0.5 en VR, 0.25 en 2D
-        var color = isVR ? 0x1E90FF : 0xFF0000; // ← couleur : bleu en VR, rouge en 2D
+        var radius = isVR ? 0.5 : 0.25;        // VR → 0.5, 2D → 0.25
+        var color = isVR ? 0x1E90FF : 0xFF0000; // VR → bleu, 2D → rouge
         var opacity = isVR ? 0.85 : 0.6;
 
         var texture = createPulseCircleTexture();
@@ -328,7 +326,7 @@
     }
 
     // --------------------------------------------------------------
-    //  INIT HOTSPOTS
+    //  INIT HOTSPOTS  (appelé par rebuildHotspots à chaque changement de mode)
     // --------------------------------------------------------------
     function initHotspots() {
         infoLayer = document.getElementById('info-hotspot-layer');
@@ -461,7 +459,7 @@
     }
 
     // --------------------------------------------------------------
-    //  VR: LASER-DRIVEN ARROW  (flèche masquée en VR, pas de survol)
+    //  VR: LASER-DRIVEN ARROW  (flèche masquée en VR)
     // --------------------------------------------------------------
     function getDominantController() {
         var controllers = window.tourState.xrControllers;
@@ -471,9 +469,8 @@
 
     function updateVRArrowFromLaser() {
         if (!window.tourState.isXRActive) return;
-        // Masquer la flèche au sol en VR
         groundHotspotGroup.visible = false;
-        // On ne fait pas de survol, on ne change pas de couleur
+        // Pas de survol
     }
 
     // --------------------------------------------------------------

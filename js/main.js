@@ -325,6 +325,12 @@
             window.tourState.vrGroup.position.y = -1.6;
         }
 
+        // === CORRECTION : forcer la reconstruction des hotspots pour le mode VR ===
+        if (window.rebuildHotspots) {
+            window.rebuildHotspots();
+            console.log('[XR] Hotspots rebuilt for VR mode');
+        }
+
         if (window.updateVRButtonState) {
             window.updateVRButtonState(true);
         }
@@ -354,6 +360,12 @@
         // Remettre le groupe VR à la position normale
         if (window.tourState.vrGroup) {
             window.tourState.vrGroup.position.y = 0;
+        }
+
+        // === CORRECTION : forcer la reconstruction des hotspots pour le mode 2D ===
+        if (window.rebuildHotspots) {
+            window.rebuildHotspots();
+            console.log('[XR] Hotspots rebuilt for 2D mode');
         }
 
         if (window.hideVRUI) {
